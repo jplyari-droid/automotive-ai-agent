@@ -111,8 +111,14 @@
       max-width: 100%;
       max-height: 300px;
       border-radius: 10px;
-      display: block;
+      display: none;
       margin-top: 8px;
+    }
+
+    #fileInfo {
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: 0.9;
     }
 
     #status {
@@ -145,7 +151,7 @@
     <div class="message ai">
 Automotive Diagnostic Agent Ready.
 
-آپ سوال لکھ سکتے ہیں اور diagnostic screenshot یا گاڑی کی تصویر upload کر سکتے ہیں۔
+آپ سوال لکھ سکتے ہیں، image upload کر سکتے ہیں، اور PDF diagnostic report بھی upload کر سکتے ہیں۔
 
 Follow-up سوال اسی diagnostic case کے context میں یاد رکھا جائے گا۔
     </div>
@@ -157,22 +163,23 @@ Follow-up سوال اسی diagnostic case کے context میں یاد رکھا ج
   ></textarea>
 
   <input
-    id="imageInput"
+    id="fileInput"
     type="file"
-    accept="image/*"
+    accept="image/*,.pdf,application/pdf"
   />
 
   <div id="previewBox">
-    <div>Selected image preview:</div>
-    <img id="previewImage" alt="Selected diagnostic image preview" />
+    <div>Selected file:</div>
+    <img id="previewImage" alt="Selected preview" />
+    <div id="fileInfo"></div>
   </div>
 
   <div class="small">
-    Optional: fault code screenshot, live data image, scanner photo یا گاڑی کی تصویر۔
+    Optional: fault code screenshot, live data image, scanner photo یا PDF scan report۔
   </div>
 
   <button id="sendButton" type="button">
-    Send Question / Image
+    Send Question / File
   </button>
 
   <div id="status"></div>
@@ -184,43 +191,51 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const chat = document.getElementById("chat");
   const questionBox = document.getElementById("question");
-  const imageInput = document.getElementById("imageInput");
+  const fileInput = document.getElementById("fileInput");
   const sendButton = document.getElementById("sendButton");
   const newCaseButton = document.getElementById("newCaseButton");
   const status = document.getElementById("status");
-
   const previewBox = document.getElementById("previewBox");
   const previewImage = document.getElementById("previewImage");
+  const fileInfo = document.getElementById("fileInfo");
 
-  let previousResponseId = "";
+let previousResponseId = "";
 
-  imageInput.addEventListener("change", function () {
-    const file = imageInput.files.length > 0
-      ? imageInput.files[0]
+  fileInput.addEventListener("change", function () {
+    const file = fileInput.files.length > 0
+      ? fileInput.files[0]
       : null;
 
     if (!file) {
       previewBox.style.display = "none";
+      previewImage.style.display = "none";
       previewImage.src = "";
+      fileInfo.textContent = "";
       return;
     }
 
-    const imageUrl = URL.createObjectURL(file);
-
-    previewImage.src = imageUrl;
     previewBox.style.display = "block";
+    fileInfo.textContent = "File: " + file.name + " (" + file.type + ")";
+
+    if (file.type.startsWith("image/")) {
+      const imageUrl = URL.createObjectURL(file);
+      previewImage.src = imageUrl;
+      previewImage.style.display = "block";
+    } else {
+      previewImage.src = "";
+      previewImage.style.display = "none";
+    }
   });
 
   async function askAgent() {
-
     const question = questionBox.value.trim();
 
-    const imageFile = imageInput.files.length > 0
-      ? imageInput.files[0]
+    const file = fileInput.files.length > 0
+      ? fileInput.files[0]
       : null;
 
-    if (!question && !imageFile) {
-      alert("Please enter a question or choose an image.");
+    if (!question && !file) {
+      alert("Please enter a question or choose a file.");
       return;
     }
 
@@ -237,23 +252,30 @@ document.addEventListener("DOMContentLoaded", function () {
       userText += question;
     }
 
-    if (imageFile) {
-      userText += "\n\nImage: " + imageFile.name;
+    if (file) {
+      userText += "\n\nFile: " + file.name;
     }
 
     userMessage.textContent = userText;
     chat.appendChild(userMessage);
 
-    if (imageFile) {
+    if (file && file.type.startsWith("image/")) {
       const chatImage = document.createElement("img");
 
-      chatImage.src = URL.createObjectURL(imageFile);
+      chatImage.src = URL.createObjectURL(file);
       chatImage.style.maxWidth = "100%";
       chatImage.style.maxHeight = "280px";
       chatImage.style.borderRadius = "10px";
       chatImage.style.marginBottom = "12px";
 
       chat.appendChild(chatImage);
+    }
+
+    if (file && file.type === "application/pdf") {
+      const pdfNote = document.createElement("div");
+      pdfNote.className = "message user";
+      pdfNote.textContent = "PDF uploaded: " + file.name;
+      chat.appendChild(pdfNote);
     }
 
     const loading = document.createElement("div");
@@ -265,13 +287,12 @@ document.addEventListener("DOMContentLoaded", function () {
     chat.scrollTop = chat.scrollHeight;
 
     try {
-
       const formData = new FormData();
 
       formData.append("question", question);
 
-      if (imageFile) {
-        formData.append("image", imageFile);
+      if (file) {
+        formData.append("file", file);
       }
 
       if (previousResponseId) {
@@ -294,7 +315,6 @@ document.addEventListener("DOMContentLoaded", function () {
       aiMessage.className = "message ai";
 
       if (data.answer) {
-
         aiMessage.textContent =
           "Automotive AI:\n" + data.answer;
 
@@ -306,7 +326,6 @@ document.addEventListener("DOMContentLoaded", function () {
           "Diagnostic case context saved.";
 
       } else {
-
         aiMessage.textContent =
           "Error:\n" +
           (data.error || "Unknown error");
@@ -317,7 +336,6 @@ document.addEventListener("DOMContentLoaded", function () {
       chat.appendChild(aiMessage);
 
     } catch (error) {
-
       loading.remove();
 
       const errorMessage =
@@ -336,34 +354,38 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     questionBox.value = "";
-    imageInput.value = "";
+    fileInput.value = "";
 
-    previewImage.src = "";
     previewBox.style.display = "none";
+    previewImage.style.display = "none";
+    previewImage.src = "";
+    fileInfo.textContent = "";
 
     sendButton.disabled = false;
     sendButton.textContent =
-      "Send Question / Image";
+      "Send Question / File";
 
     chat.scrollTop = chat.scrollHeight;
   }
 
   function startNewCase() {
-
     previousResponseId = "";
 
-    chat.innerHTML = `
+chat.innerHTML = `
       <div class="message ai">
 New diagnostic case started.
 
-گاڑی کی معلومات، DTC، symptoms یا تصویر بھیجیں۔
+گاڑی کی معلومات، DTC، symptoms، image یا PDF report بھیجیں۔
       </div>
     `;
 
     questionBox.value = "";
-    imageInput.value = "";
-    previewImage.src = "";
+    fileInput.value = "";
+
     previewBox.style.display = "none";
+    previewImage.style.display = "none";
+    previewImage.src = "";
+    fileInfo.textContent = "";
 
     status.textContent =
       "New diagnostic case ready.";
@@ -382,7 +404,6 @@ New diagnostic case started.
   questionBox.addEventListener(
     "keydown",
     function (event) {
-
       if (
         event.key === "Enter" &&
         !event.shiftKey
