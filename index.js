@@ -176,8 +176,10 @@ Reply in the same language as the user unless asked otherwise.
   }
 });
 
-app.listen(3000, () => {
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
   console.log(
-    "Automotive AI Agent running on http://localhost:3000"
+    `Automotive AI Agent running on port ${PORT}`
   );
 });
