@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
   <title>Automotive AI Agent</title>
 
   <style>
@@ -14,7 +18,7 @@
     }
 
     .container {
-      max-width: 900px;
+      max-width: 950px;
       margin: auto;
       padding: 20px;
     }
@@ -24,15 +28,41 @@
       margin-bottom: 10px;
     }
 
-    .topbar {
-      display: flex;
-      gap: 10px;
+    .panel {
+      background: #1f2937;
+      padding: 14px;
+      border-radius: 12px;
       margin-bottom: 15px;
     }
 
+    .topbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
     .topbar button {
-      width: auto;
       flex: 1;
+    }
+
+    #caseInfo {
+      background: #1f2937;
+      padding: 12px 14px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      font-size: 14px;
+      word-break: break-all;
+    }
+
+    #caseIdDisplay {
+      font-weight: bold;
+    }
+
+    #vehicleInfo {
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: 0.9;
+      white-space: pre-wrap;
     }
 
     #chat {
@@ -61,6 +91,10 @@
       background: #0f766e;
     }
 
+    .history {
+      background: #312e81;
+    }
+
     textarea {
       width: 100%;
       height: 90px;
@@ -73,25 +107,32 @@
       resize: vertical;
     }
 
-    input[type="file"] {
+    input[type="file"],
+    input[type="text"] {
       width: 100%;
       box-sizing: border-box;
       padding: 12px;
       background: white;
       color: black;
       border-radius: 10px;
+      border: none;
       margin-bottom: 10px;
+      font-size: 16px;
     }
 
     button {
       width: 100%;
-      padding: 15px;
-      font-size: 18px;
+      padding: 14px;
+      font-size: 17px;
       border: none;
       border-radius: 10px;
       background: #2563eb;
       color: white;
       cursor: pointer;
+    }
+
+    button:hover {
+      opacity: 0.95;
     }
 
     button:disabled {
@@ -124,13 +165,45 @@
     #status {
       margin-top: 10px;
       font-size: 14px;
-      opacity: 0.85;
+      opacity: 0.9;
     }
 
     .small {
       font-size: 14px;
       opacity: 0.8;
       margin-bottom: 10px;
+    }
+
+    #searchResults {
+      display: none;
+      margin-top: 10px;
+    }
+
+    .caseResult {
+      background: #374151;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      line-height: 1.5;
+    }
+
+    .caseResult:hover {
+      background: #4b5563;
+    }
+
+    .label {
+      font-weight: bold;
+    }
+
+    @media (max-width: 600px) {
+      .topbar {
+        flex-direction: column;
+      }
+
+      .container {
+        padding: 12px;
+      }
     }
   </style>
 </head>
@@ -142,25 +215,79 @@
   <h1>🚗 Automotive AI Agent</h1>
 
   <div class="topbar">
-    <button id="newCaseButton" type="button">
+    <button
+      id="newCaseButton"
+      type="button"
+    >
       New Diagnostic Case
     </button>
   </div>
 
+  <div id="caseInfo">
+
+    <div>
+      Diagnostic Case:
+      <span id="caseIdDisplay">
+        Not created yet
+      </span>
+    </div>
+
+    <div id="vehicleInfo"></div>
+
+  </div>
+
+  <!-- VEHICLE HISTORY SEARCH -->
+
+  <div class="panel">
+
+    <div
+      class="small"
+      style="font-weight: bold;"
+    >
+      Search Vehicle History
+    </div>
+
+    <input
+      id="vehicleSearch"
+      type="text"
+      placeholder="VIN, Frame/Chassis No. یا Model Code لکھیں"
+    />
+
+    <button
+      id="searchButton"
+      type="button"
+    >
+      Search Vehicle History
+    </button>
+
+    <div id="searchStatus"></div>
+
+    <div id="searchResults"></div>
+
+  </div>
+
+  <!-- CHAT -->
+
   <div id="chat">
+
     <div class="message ai">
 Automotive Diagnostic Agent Ready.
 
 آپ سوال لکھ سکتے ہیں، image upload کر سکتے ہیں، اور PDF diagnostic report بھی upload کر سکتے ہیں۔
 
-Follow-up سوال اسی diagnostic case کے context میں یاد رکھا جائے گا۔
+Vehicle history کو VIN، Frame/Chassis Number یا Model Code سے search کیا جا سکتا ہے۔
     </div>
+
   </div>
+
+  <!-- QUESTION -->
 
   <textarea
     id="question"
     placeholder="اپنا automotive diagnostic سوال یہاں لکھیں..."
   ></textarea>
+
+  <!-- FILE -->
 
   <input
     id="fileInput"
@@ -169,16 +296,28 @@ Follow-up سوال اسی diagnostic case کے context میں یاد رکھا ج
   />
 
   <div id="previewBox">
-    <div>Selected file:</div>
-    <img id="previewImage" alt="Selected preview" />
+
+    <div>
+      Selected file:
+    </div>
+
+    <img
+      id="previewImage"
+      alt="Selected preview"
+    />
+
     <div id="fileInfo"></div>
+
   </div>
 
   <div class="small">
     Optional: fault code screenshot, live data image, scanner photo یا PDF scan report۔
   </div>
 
-  <button id="sendButton" type="button">
+  <button
+    id="sendButton"
+    type="button"
+  >
     Send Question / File
   </button>
 
@@ -187,234 +326,1047 @@ Follow-up سوال اسی diagnostic case کے context میں یاد رکھا ج
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener(
+  "DOMContentLoaded",
+  function () {
 
-  const chat = document.getElementById("chat");
-  const questionBox = document.getElementById("question");
-  const fileInput = document.getElementById("fileInput");
-  const sendButton = document.getElementById("sendButton");
-  const newCaseButton = document.getElementById("newCaseButton");
-  const status = document.getElementById("status");
-  const previewBox = document.getElementById("previewBox");
-  const previewImage = document.getElementById("previewImage");
-  const fileInfo = document.getElementById("fileInfo");
+    const chat =
+      document.getElementById("chat");
 
-let previousResponseId = "";
+    const questionBox =
+      document.getElementById("question");
 
-  fileInput.addEventListener("change", function () {
-    const file = fileInput.files.length > 0
-      ? fileInput.files[0]
-      : null;
+    const fileInput =
+      document.getElementById("fileInput");
 
-    if (!file) {
-      previewBox.style.display = "none";
-      previewImage.style.display = "none";
-      previewImage.src = "";
-      fileInfo.textContent = "";
-      return;
-    }
+    const sendButton =
+      document.getElementById("sendButton");
 
-    previewBox.style.display = "block";
-    fileInfo.textContent = "File: " + file.name + " (" + file.type + ")";
+    const newCaseButton =
+      document.getElementById(
+        "newCaseButton"
+      );
 
-    if (file.type.startsWith("image/")) {
-      const imageUrl = URL.createObjectURL(file);
-      previewImage.src = imageUrl;
-      previewImage.style.display = "block";
-    } else {
-      previewImage.src = "";
-      previewImage.style.display = "none";
-    }
-  });
+    const status =
+      document.getElementById("status");
 
-  async function askAgent() {
-    const question = questionBox.value.trim();
+    const previewBox =
+      document.getElementById(
+        "previewBox"
+      );
 
-    const file = fileInput.files.length > 0
-      ? fileInput.files[0]
-      : null;
+    const previewImage =
+      document.getElementById(
+        "previewImage"
+      );
 
-    if (!question && !file) {
-      alert("Please enter a question or choose a file.");
-      return;
-    }
+    const fileInfo =
+      document.getElementById(
+        "fileInfo"
+      );
 
-    sendButton.disabled = true;
-    sendButton.textContent = "AI Agent is thinking...";
-    status.textContent = "Sending request...";
+    const caseIdDisplay =
+      document.getElementById(
+        "caseIdDisplay"
+      );
 
-    const userMessage = document.createElement("div");
-    userMessage.className = "message user";
+    const vehicleInfo =
+      document.getElementById(
+        "vehicleInfo"
+      );
 
-    let userText = "You:\n";
+    const vehicleSearch =
+      document.getElementById(
+        "vehicleSearch"
+      );
 
-    if (question) {
-      userText += question;
-    }
+    const searchButton =
+      document.getElementById(
+        "searchButton"
+      );
 
-    if (file) {
-      userText += "\n\nFile: " + file.name;
-    }
+    const searchResults =
+      document.getElementById(
+        "searchResults"
+      );
 
-    userMessage.textContent = userText;
-    chat.appendChild(userMessage);
+    const searchStatus =
+      document.getElementById(
+        "searchStatus"
+      );
 
-    if (file && file.type.startsWith("image/")) {
-      const chatImage = document.createElement("img");
+    let previousResponseId = "";
 
-      chatImage.src = URL.createObjectURL(file);
-      chatImage.style.maxWidth = "100%";
-      chatImage.style.maxHeight = "280px";
-      chatImage.style.borderRadius = "10px";
-      chatImage.style.marginBottom = "12px";
+    let currentCaseId = "";
 
-      chat.appendChild(chatImage);
-    }
+    // =====================================
+    // FILE PREVIEW
+    // =====================================
 
-    if (file && file.type === "application/pdf") {
-      const pdfNote = document.createElement("div");
-      pdfNote.className = "message user";
-      pdfNote.textContent = "PDF uploaded: " + file.name;
-      chat.appendChild(pdfNote);
-    }
+    fileInput.addEventListener(
+      "change",
+      function () {
 
-    const loading = document.createElement("div");
-    loading.className = "message ai";
-    loading.textContent = "Automotive AI is thinking...";
+        const file =
+          fileInput.files.length > 0
+            ? fileInput.files[0]
+            : null;
 
-    chat.appendChild(loading);
+        if (!file) {
 
-    chat.scrollTop = chat.scrollHeight;
+          previewBox.style.display =
+            "none";
 
-    try {
-      const formData = new FormData();
+          previewImage.style.display =
+            "none";
 
-      formData.append("question", question);
+          previewImage.src = "";
 
-      if (file) {
-        formData.append("file", file);
+          fileInfo.textContent = "";
+
+          return;
+        }
+
+        previewBox.style.display =
+          "block";
+
+        fileInfo.textContent =
+          "File: " +
+          file.name +
+          " (" +
+          file.type +
+          ")";
+
+        if (
+          file.type.startsWith(
+            "image/"
+          )
+        ) {
+
+          const imageUrl =
+            URL.createObjectURL(
+              file
+            );
+
+          previewImage.src =
+            imageUrl;
+
+          previewImage.style.display =
+            "block";
+
+        } else {
+
+          previewImage.src = "";
+
+          previewImage.style.display =
+            "none";
+        }
+      }
+    );
+
+    // =====================================
+    // DISPLAY VEHICLE DATA
+    // =====================================
+
+    function showVehicleInfo(
+      vehicle
+    ) {
+
+      if (!vehicle) {
+
+        vehicleInfo.textContent =
+          "";
+
+        return;
       }
 
-      if (previousResponseId) {
-        formData.append(
-          "previousResponseId",
-          previousResponseId
+      const lines = [];
+
+      if (vehicle.vin) {
+        lines.push(
+          "VIN: " +
+          vehicle.vin
         );
       }
 
-      const response = await fetch("/ask", {
-        method: "POST",
-        body: formData
-      });
-
-      const data = await response.json();
-
-      loading.remove();
-
-      const aiMessage = document.createElement("div");
-      aiMessage.className = "message ai";
-
-      if (data.answer) {
-        aiMessage.textContent =
-          "Automotive AI:\n" + data.answer;
-
-        if (data.responseId) {
-          previousResponseId = data.responseId;
-        }
-
-        status.textContent =
-          "Diagnostic case context saved.";
-
-      } else {
-        aiMessage.textContent =
-          "Error:\n" +
-          (data.error || "Unknown error");
-
-        status.textContent = "Error";
+      if (vehicle.chassis_number) {
+        lines.push(
+          "Frame/Chassis: " +
+          vehicle.chassis_number
+        );
       }
 
-      chat.appendChild(aiMessage);
+      if (vehicle.model_code) {
+        lines.push(
+          "Model Code: " +
+          vehicle.model_code
+        );
+      }
 
-    } catch (error) {
-      loading.remove();
+      if (vehicle.make) {
+        lines.push(
+          "Make: " +
+          vehicle.make
+        );
+      }
 
-      const errorMessage =
-        document.createElement("div");
+      if (vehicle.model) {
+        lines.push(
+          "Model: " +
+          vehicle.model
+        );
+      }
 
-      errorMessage.className = "message ai";
+      if (vehicle.year) {
+        lines.push(
+          "Year: " +
+          vehicle.year
+        );
+      }
 
-      errorMessage.textContent =
-        "Connection Error:\n" +
-        error.message;
+      if (vehicle.engine_code) {
+        lines.push(
+          "Engine: " +
+          vehicle.engine_code
+        );
+      }
 
-      chat.appendChild(errorMessage);
+      if (vehicle.mileage) {
+        lines.push(
+          "Mileage: " +
+          vehicle.mileage
+        );
+      }
+
+      vehicleInfo.textContent =
+        lines.join(" | ");
+    }
+
+    // =====================================
+    // ASK AI
+    // =====================================
+
+    async function askAgent() {
+
+      const question =
+        questionBox.value.trim();
+
+      const file =
+        fileInput.files.length > 0
+          ? fileInput.files[0]
+          : null;
+
+      if (
+        !question &&
+        !file
+      ) {
+
+        alert(
+          "Please enter a question or choose a file."
+        );
+
+        return;
+      }
+
+      sendButton.disabled = true;
+      newCaseButton.disabled = true;
+      searchButton.disabled = true;
+
+      sendButton.textContent =
+        "AI Agent is thinking...";
 
       status.textContent =
-        "Connection error";
+        "Sending request...";
+
+      const userMessage =
+        document.createElement(
+          "div"
+        );
+
+      userMessage.className =
+        "message user";
+
+      let userText =
+        "You:\n";
+
+      if (question) {
+        userText += question;
+      }
+
+      if (file) {
+
+        userText +=
+          "\n\nFile: " +
+          file.name;
+      }
+
+      userMessage.textContent =
+        userText;
+
+      chat.appendChild(
+        userMessage
+      );
+
+      if (
+        file &&
+        file.type.startsWith(
+          "image/"
+        )
+      ) {
+
+        const chatImage =
+          document.createElement(
+            "img"
+          );
+
+        chatImage.src =
+          URL.createObjectURL(
+            file
+          );
+
+        chatImage.style.maxWidth =
+          "100%";
+
+        chatImage.style.maxHeight =
+          "280px";
+
+        chatImage.style.borderRadius =
+          "10px";
+
+        chatImage.style.marginBottom =
+          "12px";
+
+        chat.appendChild(
+          chatImage
+        );
+      }
+
+      if (
+        file &&
+        file.type ===
+          "application/pdf"
+      ) {
+
+        const pdfNote =
+          document.createElement(
+            "div"
+          );
+
+        pdfNote.className =
+          "message user";
+
+        pdfNote.textContent =
+          "PDF uploaded: " +
+          file.name;
+
+        chat.appendChild(
+          pdfNote
+        );
+      }
+
+      const loading =
+        document.createElement(
+          "div"
+        );
+
+      loading.className =
+        "message ai";
+
+      loading.textContent =
+        "Automotive AI is thinking...";
+
+      chat.appendChild(
+        loading
+      );
+
+      chat.scrollTop =
+        chat.scrollHeight;
+
+      try {
+
+        const formData =
+          new FormData();
+
+        formData.append(
+          "question",
+          question
+        );
+
+        if (file) {
+
+          formData.append(
+            "file",
+            file
+          );
+        }
+
+        if (
+          previousResponseId
+        ) {
+
+          formData.append(
+            "previousResponseId",
+            previousResponseId
+          );
+        }
+
+        if (
+          currentCaseId
+        ) {
+
+          formData.append(
+            "caseId",
+            currentCaseId
+          );
+        }
+
+        const response =
+          await fetch(
+            "/ask",
+            {
+              method: "POST",
+              body: formData
+            }
+          );
+
+        const data =
+          await response.json();
+
+        loading.remove();
+
+        const aiMessage =
+          document.createElement(
+            "div"
+          );
+
+        aiMessage.className =
+          "message ai";
+
+        if (
+          response.ok &&
+          data.answer
+        ) {
+
+          aiMessage.textContent =
+            "Automotive AI:\n" +
+            data.answer;
+
+          if (
+            data.responseId
+          ) {
+
+            previousResponseId =
+              data.responseId;
+          }
+
+          if (
+            data.caseId
+          ) {
+
+            currentCaseId =
+              data.caseId;
+
+            caseIdDisplay.textContent =
+              currentCaseId;
+          }
+
+          if (
+            data.vehicleData
+          ) {
+
+            const vehicle =
+              {
+                vin:
+                  data.vehicleData.vin,
+
+                chassis_number:
+                  data.vehicleData.chassisNumber,
+
+                model_code:
+                  data.vehicleData.modelCode,
+
+                engine_code:
+                  data.vehicleData.engineCode,
+
+                mileage:
+                  data.vehicleData.mileage
+              };
+
+            showVehicleInfo(
+              vehicle
+            );
+          }
+
+          status.textContent =
+            "Diagnostic case saved to database.";
+
+        } else {
+
+          aiMessage.textContent =
+            "Error:\n" +
+            (
+              data.error ||
+              "Unknown error"
+            );
+
+          status.textContent =
+            "Error";
+        }
+
+        chat.appendChild(
+          aiMessage
+        );
+
+      } catch (error) {
+
+        loading.remove();
+
+        const errorMessage =
+          document.createElement(
+            "div"
+          );
+
+        errorMessage.className =
+          "message ai";
+
+        errorMessage.textContent =
+          "Connection Error:\n" +
+          error.message;
+
+        chat.appendChild(
+          errorMessage
+        );
+
+        status.textContent =
+          "Connection error";
+      }
+
+      questionBox.value = "";
+
+      fileInput.value = "";
+
+      previewBox.style.display =
+        "none";
+
+      previewImage.style.display =
+        "none";
+
+      previewImage.src = "";
+
+      fileInfo.textContent = "";
+
+      sendButton.disabled = false;
+      newCaseButton.disabled = false;
+      searchButton.disabled = false;
+
+      sendButton.textContent =
+        "Send Question / File";
+
+      chat.scrollTop =
+        chat.scrollHeight;
     }
 
-    questionBox.value = "";
-    fileInput.value = "";
+    // =====================================
+    // NEW CASE
+    // =====================================
 
-    previewBox.style.display = "none";
-    previewImage.style.display = "none";
-    previewImage.src = "";
-    fileInfo.textContent = "";
+    async function startNewCase() {
 
-    sendButton.disabled = false;
-    sendButton.textContent =
-      "Send Question / File";
+      newCaseButton.disabled =
+        true;
 
-    chat.scrollTop = chat.scrollHeight;
-  }
+      sendButton.disabled =
+        true;
 
-  function startNewCase() {
-    previousResponseId = "";
+      searchButton.disabled =
+        true;
 
-chat.innerHTML = `
-      <div class="message ai">
+      status.textContent =
+        "Creating new diagnostic case...";
+
+      try {
+
+        const response =
+          await fetch(
+            "/new-case",
+            {
+              method: "POST"
+            }
+          );
+
+        const data =
+          await response.json();
+
+        if (
+          !response.ok ||
+          !data.caseId
+        ) {
+
+          throw new Error(
+            data.error ||
+            "Could not create new case."
+          );
+        }
+
+        currentCaseId =
+          data.caseId;
+
+        previousResponseId =
+          "";
+
+        caseIdDisplay.textContent =
+          currentCaseId;
+
+        vehicleInfo.textContent =
+          "";
+
+        chat.innerHTML = `
+          <div class="message ai">
 New diagnostic case started.
 
-گاڑی کی معلومات، DTC، symptoms، image یا PDF report بھیجیں۔
-      </div>
-    `;
+Case ID:
+${currentCaseId}
 
-    questionBox.value = "";
-    fileInput.value = "";
+گاڑی کی معلومات، VIN، Frame/Chassis Number، Model Code، DTC، symptoms، image یا PDF report بھیجیں۔
+          </div>
+        `;
 
-    previewBox.style.display = "none";
-    previewImage.style.display = "none";
-    previewImage.src = "";
-    fileInfo.textContent = "";
+        questionBox.value =
+          "";
 
-    status.textContent =
-      "New diagnostic case ready.";
-  }
+        fileInput.value =
+          "";
 
-  sendButton.addEventListener(
-    "click",
-    askAgent
-  );
+        previewBox.style.display =
+          "none";
 
-  newCaseButton.addEventListener(
-    "click",
-    startNewCase
-  );
+        previewImage.style.display =
+          "none";
 
-  questionBox.addEventListener(
-    "keydown",
-    function (event) {
-      if (
-        event.key === "Enter" &&
-        !event.shiftKey
-      ) {
-        event.preventDefault();
-        askAgent();
+        previewImage.src =
+          "";
+
+        fileInfo.textContent =
+          "";
+
+        status.textContent =
+          "New diagnostic case created and saved.";
+
+      } catch (error) {
+
+        status.textContent =
+          "Could not create new case.";
+
+        alert(
+          "New Case Error:\n" +
+          error.message
+        );
+
+      } finally {
+
+        newCaseButton.disabled =
+          false;
+
+        sendButton.disabled =
+          false;
+
+        searchButton.disabled =
+          false;
       }
     }
-  );
 
-});
+    // =====================================
+    // VEHICLE SEARCH
+    // =====================================
+
+    async function searchVehicleHistory() {
+
+      const query =
+        vehicleSearch
+          .value
+          .trim();
+
+      if (!query) {
+
+        alert(
+          "VIN, Frame/Chassis Number یا Model Code لکھیں۔"
+        );
+
+        return;
+      }
+
+      searchButton.disabled =
+        true;
+
+      searchStatus.textContent =
+        "Searching vehicle history...";
+
+      searchResults.style.display =
+        "none";
+
+      searchResults.innerHTML =
+        "";
+
+      try {
+
+        const response =
+          await fetch(
+            "/vehicle-search/" +
+            encodeURIComponent(
+              query
+            )
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+
+          throw new Error(
+            data.error ||
+            "Vehicle search failed."
+          );
+        }
+
+        if (
+          !data.cases ||
+          data.cases.length === 0
+        ) {
+
+          searchStatus.textContent =
+            "No vehicle history found.";
+
+          return;
+        }
+
+        searchStatus.textContent =
+          data.cases.length +
+          " case(s) found.";
+
+        searchResults.style.display =
+          "block";
+
+        data.cases.forEach(
+          function (vehicleCase) {
+
+            const div =
+              document.createElement(
+                "div"
+              );
+
+            div.className =
+              "caseResult";
+
+            let text =
+              "Case ID: " +
+              vehicleCase.case_id;
+
+            if (
+              vehicleCase.vin
+            ) {
+
+              text +=
+                "\nVIN: " +
+                vehicleCase.vin;
+            }
+
+            if (
+              vehicleCase.chassis_number
+            ) {
+
+              text +=
+                "\nFrame/Chassis: " +
+                vehicleCase.chassis_number;
+            }
+
+            if (
+              vehicleCase.model_code
+            ) {
+
+              text +=
+                "\nModel Code: " +
+                vehicleCase.model_code;
+            }
+
+            if (
+              vehicleCase.engine_code
+            ) {
+
+              text +=
+                "\nEngine: " +
+                vehicleCase.engine_code;
+            }
+
+            if (
+              vehicleCase.mileage
+            ) {
+
+              text +=
+                "\nMileage: " +
+                vehicleCase.mileage;
+            }
+
+            text +=
+              "\n\nClick to load this case.";
+
+            div.textContent =
+              text;
+
+            div.addEventListener(
+              "click",
+              function () {
+
+                loadCase(
+                  vehicleCase.case_id
+                );
+              }
+            );
+
+            searchResults.appendChild(
+              div
+            );
+          }
+        );
+
+      } catch (error) {
+
+        searchStatus.textContent =
+          "Search error: " +
+          error.message;
+
+      } finally {
+
+        searchButton.disabled =
+          false;
+      }
+    }
+
+    // =====================================
+    // LOAD CASE HISTORY
+    // =====================================
+
+    async function loadCase(
+      caseId
+    ) {
+
+      status.textContent =
+        "Loading diagnostic history...";
+
+      try {
+
+        const response =
+          await fetch(
+            "/case/" +
+            encodeURIComponent(
+              caseId
+            )
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+
+          throw new Error(
+            data.error ||
+            "Could not load case."
+          );
+        }
+
+        currentCaseId =
+          caseId;
+
+        previousResponseId =
+          "";
+
+        caseIdDisplay.textContent =
+          currentCaseId;
+
+        showVehicleInfo(
+          data.vehicle
+        );
+
+        chat.innerHTML =
+          "";
+
+        const header =
+          document.createElement(
+            "div"
+          );
+
+        header.className =
+          "message history";
+
+        header.textContent =
+          "Loaded diagnostic history\n\nCase ID: " +
+          currentCaseId;
+
+        chat.appendChild(
+          header
+        );
+
+        if (
+          !data.history ||
+          data.history.length === 0
+        ) {
+
+          const empty =
+            document.createElement(
+              "div"
+            );
+
+          empty.className =
+            "message ai";
+
+          empty.textContent =
+            "No diagnostic records found for this case.";
+
+          chat.appendChild(
+            empty
+          );
+
+        } else {
+
+          data.history.forEach(
+            function (record) {
+
+              if (
+                record.user_question
+              ) {
+
+                const userMessage =
+                  document.createElement(
+                    "div"
+                  );
+
+                userMessage.className =
+                  "message user";
+
+                let text =
+                  "You:\n" +
+                  record.user_question;
+
+                if (
+                  record.file_name
+                ) {
+
+                  text +=
+                    "\n\nFile: " +
+                    record.file_name;
+                }
+
+                userMessage.textContent =
+                  text;
+
+                chat.appendChild(
+                  userMessage
+                );
+              }
+
+              if (
+                record.ai_answer
+              ) {
+
+                const aiMessage =
+                  document.createElement(
+                    "div"
+                  );
+
+                aiMessage.className =
+                  "message ai";
+
+                aiMessage.textContent =
+                  "Automotive AI:\n" +
+                  record.ai_answer;
+
+                chat.appendChild(
+                  aiMessage
+                );
+              }
+
+              if (
+                record.openai_response_id
+              ) {
+
+                previousResponseId =
+                  record.openai_response_id;
+              }
+
+            }
+          );
+        }
+
+        chat.scrollTop =
+          chat.scrollHeight;
+
+        status.textContent =
+          "Diagnostic history loaded.";
+
+        searchResults.style.display =
+          "none";
+
+      } catch (error) {
+
+        status.textContent =
+          "Load Case Error: " +
+          error.message;
+      }
+    }
+
+    // =====================================
+    // EVENTS
+    // =====================================
+
+    sendButton.addEventListener(
+      "click",
+      askAgent
+    );
+
+    newCaseButton.addEventListener(
+      "click",
+      startNewCase
+    );
+
+    searchButton.addEventListener(
+      "click",
+      searchVehicleHistory
+    );
+
+    vehicleSearch.addEventListener(
+      "keydown",
+      function (event) {
+
+        if (
+          event.key ===
+          "Enter"
+        ) {
+
+          event.preventDefault();
+
+          searchVehicleHistory();
+        }
+      }
+    );
+
+    questionBox.addEventListener(
+      "keydown",
+      function (event) {
+
+        if (
+          event.key ===
+            "Enter" &&
+          !event.shiftKey
+        ) {
+
+          event.preventDefault();
+
+          askAgent();
+        }
+      }
+    );
+
+  }
+);
 </script>
 
 </body>
