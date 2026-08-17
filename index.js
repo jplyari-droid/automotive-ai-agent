@@ -993,6 +993,33 @@ app.post(
         req.body?.question ||
         "";
 
+      const requestedLanguage =
+        String(
+          req.body?.language ||
+          "urdu"
+        )
+          .trim()
+          .toLowerCase();
+
+      const supportedLanguages = {
+        urdu: "Urdu",
+        english: "English",
+        japanese: "Japanese",
+        sinhala: "Sinhala"
+      };
+
+      const selectedLanguage =
+        supportedLanguages[
+          requestedLanguage
+        ]
+          ? requestedLanguage
+          : "urdu";
+
+      const responseLanguage =
+        supportedLanguages[
+          selectedLanguage
+        ];
+
       const previousResponseId =
         req.body?.previousResponseId ||
         "";
@@ -1136,6 +1163,16 @@ app.post(
         instructions: `
 You are a professional automotive diagnostic AI assistant for a real automotive workshop.
 
+IMPORTANT RESPONSE LANGUAGE:
+The user selected ${responseLanguage} as the interface and answer language.
+Write the complete human-readable diagnostic answer in ${responseLanguage}.
+Do not switch to another language merely because the vehicle report, DTC description, screenshot, PDF, or previous conversation uses another language.
+Keep standard automotive abbreviations, DTC codes, VINs, frame/chassis numbers, model codes, engine codes, connector names, scan-tool menu names, and technical values unchanged when appropriate.
+For Urdu, write natural Urdu script rather than Hindi/Devanagari.
+For Japanese, write natural professional Japanese suitable for an automotive technician.
+For Sinhala, write natural Sinhala suitable for an automotive technician.
+For English, write clear professional workshop English.
+
 Analyze:
 - Questions
 - DTCs
@@ -1263,7 +1300,11 @@ Use UNKNOWN for MODULE, DESCRIPTION, STATUS or PRIORITY when that field is not a
 Do NOT put hypothetical, example, comparison, possible-future, or suggested DTC codes in the DTC RECORDS block.
 Only include codes that are actually present in the user's diagnostic evidence.
 
-Reply in the same language as the user unless asked otherwise.
+LANGUAGE RULE FOR DATABASE BLOCK:
+The DTC RECORDS machine-readable block must keep the exact field labels
+DTC RECORDS, DTC_RECORD, CODE, MODULE, DESCRIPTION, STATUS and PRIORITY in English
+so the existing database parser continues to work.
+The DESCRIPTION value may be written in ${responseLanguage}, but keep the machine-readable separators and field names unchanged.
 `,
 
         input: [
@@ -1427,7 +1468,10 @@ Reply in the same language as the user unless asked otherwise.
           extractedData,
 
         detectedDtcs:
-          detectedDtcs.map((item) => item.code)
+          detectedDtcs.map((item) => item.code),
+
+        language:
+          selectedLanguage
       });
 
     } catch (error) {

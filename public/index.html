@@ -108,7 +108,8 @@
     }
 
     input[type="file"],
-    input[type="text"] {
+    input[type="text"],
+    select {
       width: 100%;
       box-sizing: border-box;
       padding: 12px;
@@ -231,23 +232,33 @@
 
 <div class="container">
 
-  <h1>🚗 Automotive AI Agent</h1>
+  <h1 id="appTitle">🚗 Automotive AI Agent</h1>
+
+  <div class="panel">
+    <div id="languageLabel" class="small" style="font-weight: bold;">Language</div>
+    <select id="languageSelect">
+      <option value="urdu">اردو</option>
+      <option value="english">English</option>
+      <option value="japanese">日本語</option>
+      <option value="sinhala">සිංහල</option>
+    </select>
+  </div>
 
   <div class="topbar">
     <button
       id="newCaseButton"
       type="button"
     >
-      New Diagnostic Case
+      <span id="newCaseButtonText">New Diagnostic Case</span>
     </button>
   </div>
 
   <div id="caseInfo">
 
     <div>
-      Diagnostic Case:
+      <span id="diagnosticCaseLabel">Diagnostic Case:</span>
       <span id="caseIdDisplay">
-        Not created yet
+        <span id="notCreatedText">Not created yet</span>
       </span>
     </div>
 
@@ -263,7 +274,7 @@
       class="small"
       style="font-weight: bold;"
     >
-      Search Vehicle History
+      <span id="vehicleHistoryTitle">Search Vehicle History</span>
     </div>
 
     <input
@@ -276,7 +287,7 @@
       id="searchButton"
       type="button"
     >
-      Search Vehicle History
+      <span id="vehicleSearchButtonText">Search Vehicle History</span>
     </button>
 
     <div id="searchStatus"></div>
@@ -293,7 +304,7 @@
       class="small"
       style="font-weight: bold;"
     >
-      Search DTC History
+      <span id="dtcHistoryTitle">Search DTC History</span>
     </div>
 
     <input
@@ -306,7 +317,7 @@
       id="dtcSearchButton"
       type="button"
     >
-      Search DTC History
+      <span id="dtcSearchButtonText">Search DTC History</span>
     </button>
 
     <div id="dtcSearchStatus"></div>
@@ -319,13 +330,7 @@
 
   <div id="chat">
 
-    <div class="message ai">
-Automotive Diagnostic Agent Ready.
-
-آپ سوال لکھ سکتے ہیں، image upload کر سکتے ہیں، اور PDF diagnostic report بھی upload کر سکتے ہیں۔
-
-Vehicle history کو VIN، Frame/Chassis Number یا Model Code سے search کیا جا سکتا ہے۔
-    </div>
+    <div id="welcomeMessage" class="message ai"></div>
 
   </div>
 
@@ -346,7 +351,7 @@ Vehicle history کو VIN، Frame/Chassis Number یا Model Code سے search کی
 
   <div id="previewBox">
 
-    <div>
+    <div id="selectedFileLabel">
       Selected file:
     </div>
 
@@ -359,7 +364,7 @@ Vehicle history کو VIN، Frame/Chassis Number یا Model Code سے search کی
 
   </div>
 
-  <div class="small">
+  <div id="optionalFileHelp" class="small">
     Optional: fault code screenshot, live data image, scanner photo یا PDF scan report۔
   </div>
 
@@ -367,7 +372,7 @@ Vehicle history کو VIN، Frame/Chassis Number یا Model Code سے search کی
     id="sendButton"
     type="button"
   >
-    Send Question / File
+    <span id="sendButtonText">Send Question / File</span>
   </button>
 
   <div id="status"></div>
@@ -467,6 +472,74 @@ document.addEventListener(
     let previousResponseId = "";
 
     let currentCaseId = "";
+
+    const languageSelect = document.getElementById("languageSelect");
+
+    const translations = {
+      urdu: {
+        htmlLang: "ur", direction: "rtl", languageLabel: "زبان", newCase: "نیا تشخیصی کیس", diagnosticCase: "تشخیصی کیس:", notCreated: "ابھی بنایا نہیں گیا",
+        vehicleHistoryTitle: "گاڑی کی ہسٹری تلاش کریں", vehicleSearchPlaceholder: "VIN، Frame/Chassis No. یا Model Code لکھیں", vehicleSearchButton: "گاڑی کی ہسٹری تلاش کریں",
+        dtcHistoryTitle: "DTC ہسٹری تلاش کریں", dtcSearchPlaceholder: "DTC code لکھیں، مثال: P0420 یا U0167", dtcSearchButton: "DTC ہسٹری تلاش کریں",
+        questionPlaceholder: "اپنا automotive diagnostic سوال یہاں لکھیں...", selectedFile: "منتخب فائل:", optionalFileHelp: "اختیاری: fault code screenshot، live data image، scanner photo یا PDF scan report۔",
+        send: "سوال / فائل بھیجیں", welcome: "Automotive Diagnostic Agent تیار ہے۔\n\nآپ سوال لکھ سکتے ہیں، image upload کر سکتے ہیں، اور PDF diagnostic report بھی upload کر سکتے ہیں۔\n\nVehicle history کو VIN، Frame/Chassis Number یا Model Code سے search کیا جا سکتا ہے۔\n\nDTC history کو P0420 یا U0167 جیسے code سے search کیا جا سکتا ہے۔",
+        thinking: "AI Agent سوچ رہا ہے...", sending: "درخواست بھیجی جا رہی ہے...", creatingCase: "نیا diagnostic case بنایا جا رہا ہے...", saved: "Diagnostic case database میں محفوظ ہو گیا۔"
+      },
+      english: {
+        htmlLang: "en", direction: "ltr", languageLabel: "Language", newCase: "New Diagnostic Case", diagnosticCase: "Diagnostic Case:", notCreated: "Not created yet",
+        vehicleHistoryTitle: "Search Vehicle History", vehicleSearchPlaceholder: "Enter VIN, Frame/Chassis No. or Model Code", vehicleSearchButton: "Search Vehicle History",
+        dtcHistoryTitle: "Search DTC History", dtcSearchPlaceholder: "Enter DTC code, e.g. P0420 or U0167", dtcSearchButton: "Search DTC History",
+        questionPlaceholder: "Enter your automotive diagnostic question here...", selectedFile: "Selected file:", optionalFileHelp: "Optional: fault-code screenshot, live-data image, scanner photo or PDF scan report.",
+        send: "Send Question / File", welcome: "Automotive Diagnostic Agent Ready.\n\nYou can type a question, upload an image, or upload a PDF diagnostic report.\n\nVehicle history can be searched by VIN, Frame/Chassis Number or Model Code.\n\nDTC history can be searched by a code such as P0420 or U0167.",
+        thinking: "AI Agent is thinking...", sending: "Sending request...", creatingCase: "Creating new diagnostic case...", saved: "Diagnostic case saved to database."
+      },
+      japanese: {
+        htmlLang: "ja", direction: "ltr", languageLabel: "言語", newCase: "新しい診断ケース", diagnosticCase: "診断ケース:", notCreated: "まだ作成されていません",
+        vehicleHistoryTitle: "車両履歴を検索", vehicleSearchPlaceholder: "VIN、フレーム/シャシー番号、モデルコードを入力", vehicleSearchButton: "車両履歴を検索",
+        dtcHistoryTitle: "DTC履歴を検索", dtcSearchPlaceholder: "DTCコードを入力（例: P0420 / U0167）", dtcSearchButton: "DTC履歴を検索",
+        questionPlaceholder: "自動車診断の質問を入力してください...", selectedFile: "選択したファイル:", optionalFileHelp: "任意: 故障コード画面、ライブデータ画像、スキャナー写真、PDF診断レポート。",
+        send: "質問 / ファイルを送信", welcome: "Automotive Diagnostic Agent の準備ができました。\n\n質問の入力、画像のアップロード、PDF診断レポートのアップロードができます。\n\nVIN、フレーム/シャシー番号、モデルコードから車両履歴を検索できます。\n\nP0420 や U0167 などのDTCコードから履歴を検索できます。",
+        thinking: "AI Agent が診断中です...", sending: "リクエストを送信しています...", creatingCase: "新しい診断ケースを作成しています...", saved: "診断ケースをデータベースに保存しました。"
+      },
+      sinhala: {
+        htmlLang: "si", direction: "ltr", languageLabel: "භාෂාව", newCase: "නව රෝග විනිශ්චය කේස්", diagnosticCase: "රෝග විනිශ්චය කේස්:", notCreated: "තවම සාදා නැත",
+        vehicleHistoryTitle: "වාහන ඉතිහාසය සොයන්න", vehicleSearchPlaceholder: "VIN, Frame/Chassis No. හෝ Model Code ඇතුළත් කරන්න", vehicleSearchButton: "වාහන ඉතිහාසය සොයන්න",
+        dtcHistoryTitle: "DTC ඉතිහාසය සොයන්න", dtcSearchPlaceholder: "DTC code ඇතුළත් කරන්න, උදා: P0420 හෝ U0167", dtcSearchButton: "DTC ඉතිහාසය සොයන්න",
+        questionPlaceholder: "ඔබගේ automotive diagnostic ප්‍රශ්නය මෙහි ලියන්න...", selectedFile: "තෝරාගත් ගොනුව:", optionalFileHelp: "විකල්ප: fault code screenshot, live data image, scanner photo හෝ PDF scan report.",
+        send: "ප්‍රශ්නය / ගොනුව යවන්න", welcome: "Automotive Diagnostic Agent සූදානම්.\n\nඔබට ප්‍රශ්නයක් ලියන්න, image upload කරන්න, හෝ PDF diagnostic report එකක් upload කරන්න පුළුවන්.\n\nVIN, Frame/Chassis Number හෝ Model Code මගින් vehicle history සෙවිය හැක.\n\nP0420 හෝ U0167 වැනි DTC code මගින් DTC history සෙවිය හැක.",
+        thinking: "AI Agent විශ්ලේෂණය කරමින්...", sending: "ඉල්ලීම යවමින්...", creatingCase: "නව diagnostic case එක සාදමින්...", saved: "Diagnostic case එක database එකට save විය."
+      }
+    };
+
+    function getSelectedLanguage() { return languageSelect.value || "urdu"; }
+    function t(key) { const lang = getSelectedLanguage(); return (translations[lang] && translations[lang][key]) || translations.english[key] || key; }
+
+    function applyLanguage(language) {
+      const lang = translations[language] ? language : "urdu";
+      languageSelect.value = lang;
+      localStorage.setItem("automotiveAiLanguage", lang);
+      document.documentElement.lang = translations[lang].htmlLang;
+      document.documentElement.dir = translations[lang].direction;
+      document.getElementById("languageLabel").textContent = t("languageLabel");
+      document.getElementById("newCaseButtonText").textContent = t("newCase");
+      document.getElementById("diagnosticCaseLabel").textContent = t("diagnosticCase");
+      const notCreated = document.getElementById("notCreatedText");
+      if (notCreated && !currentCaseId) notCreated.textContent = t("notCreated");
+      document.getElementById("vehicleHistoryTitle").textContent = t("vehicleHistoryTitle");
+      vehicleSearch.placeholder = t("vehicleSearchPlaceholder");
+      document.getElementById("vehicleSearchButtonText").textContent = t("vehicleSearchButton");
+      document.getElementById("dtcHistoryTitle").textContent = t("dtcHistoryTitle");
+      dtcSearch.placeholder = t("dtcSearchPlaceholder");
+      document.getElementById("dtcSearchButtonText").textContent = t("dtcSearchButton");
+      questionBox.placeholder = t("questionPlaceholder");
+      document.getElementById("selectedFileLabel").textContent = t("selectedFile");
+      document.getElementById("optionalFileHelp").textContent = t("optionalFileHelp");
+      document.getElementById("sendButtonText").textContent = t("send");
+      const welcomeMessage = document.getElementById("welcomeMessage");
+      if (welcomeMessage) welcomeMessage.textContent = t("welcome");
+    }
+
+    const savedLanguage = localStorage.getItem("automotiveAiLanguage") || "urdu";
+    applyLanguage(savedLanguage);
 
     // =====================================
     // FILE PREVIEW
@@ -643,10 +716,10 @@ document.addEventListener(
       dtcSearchButton.disabled = true;
 
       sendButton.textContent =
-        "AI Agent is thinking...";
+        t("thinking");
 
       status.textContent =
-        "Sending request...";
+        t("sending");
 
       const userMessage =
         document.createElement(
@@ -743,7 +816,7 @@ document.addEventListener(
         "message ai";
 
       loading.textContent =
-        "Automotive AI is thinking...";
+        t("thinking");
 
       chat.appendChild(
         loading
@@ -760,6 +833,11 @@ document.addEventListener(
         formData.append(
           "question",
           question
+        );
+
+        formData.append(
+          "language",
+          getSelectedLanguage()
         );
 
         if (file) {
@@ -868,7 +946,7 @@ document.addEventListener(
           }
 
           status.textContent =
-            "Diagnostic case saved to database.";
+            t("saved");
 
         } else {
 
@@ -930,8 +1008,10 @@ document.addEventListener(
       searchButton.disabled = false;
       dtcSearchButton.disabled = false;
 
-      sendButton.textContent =
-        "Send Question / File";
+      sendButton.innerHTML =
+        '<span id="sendButtonText">' +
+        t("send") +
+        '</span>';
 
       chat.scrollTop =
         chat.scrollHeight;
@@ -956,7 +1036,7 @@ document.addEventListener(
         true;
 
       status.textContent =
-        "Creating new diagnostic case...";
+        t("creatingCase");
 
       try {
 
@@ -1636,6 +1716,13 @@ ${currentCaseId}
 
           searchDtcHistory();
         }
+      }
+    );
+
+    languageSelect.addEventListener(
+      "change",
+      function () {
+        applyLanguage(languageSelect.value);
       }
     );
 
