@@ -59,6 +59,70 @@ async function testDatabaseConnection() {
 testDatabaseConnection();
 
 // =====================================
+// CASE LANGUAGE
+// =====================================
+
+const supportedCaseLanguages = [
+  "urdu",
+  "english",
+  "japanese",
+  "sinhala"
+];
+
+function normalizeCaseLanguage(
+  language
+) {
+
+  const value =
+    String(
+      language ||
+      "urdu"
+    )
+      .trim()
+      .toLowerCase();
+
+  return supportedCaseLanguages
+    .includes(value)
+      ? value
+      : "urdu";
+}
+
+async function ensureLanguageColumn() {
+
+  try {
+
+    await pool.query(
+      `
+      ALTER TABLE vehicle_cases
+      ADD COLUMN IF NOT EXISTS language VARCHAR(20)
+      `
+    );
+
+    await pool.query(
+      `
+      UPDATE vehicle_cases
+      SET language = 'urdu'
+      WHERE language IS NULL
+         OR TRIM(language) = ''
+      `
+    );
+
+    console.log(
+      "Vehicle case language column ready."
+    );
+
+  } catch (error) {
+
+    console.error(
+      "CASE LANGUAGE COLUMN ERROR:",
+      error.message
+    );
+  }
+}
+
+ensureLanguageColumn();
+
+// =====================================
 // UPLOAD
 // =====================================
 
@@ -126,20 +190,31 @@ function createCaseId() {
 // CREATE CASE
 // =====================================
 
-async function createVehicleCase() {
+async function createVehicleCase(
+  language = "urdu"
+) {
 
   const caseId =
     createCaseId();
+
+  const caseLanguage =
+    normalizeCaseLanguage(
+      language
+    );
 
   await pool.query(
     `
     INSERT INTO vehicle_cases (
       case_id,
-      status
+      status,
+      language
     )
-    VALUES ($1, 'open')
+    VALUES ($1, 'open', $2)
     `,
-    [caseId]
+    [
+      caseId,
+      caseLanguage
+    ]
   );
 
   return caseId;
@@ -150,13 +225,21 @@ async function createVehicleCase() {
 // =====================================
 
 async function ensureCase(
-  caseId
+  caseId,
+  language = "urdu"
 ) {
+
+  const caseLanguage =
+    normalizeCaseLanguage(
+      language
+    );
 
   if (!caseId) {
 
     return await
-      createVehicleCase();
+      createVehicleCase(
+        caseLanguage
+      );
   }
 
   const result =
@@ -174,6 +257,21 @@ async function ensureCase(
     result.rows.length > 0
   ) {
 
+    await pool.query(
+      `
+      UPDATE vehicle_cases
+      SET
+        language = $2,
+        updated_at =
+          CURRENT_TIMESTAMP
+      WHERE case_id = $1
+      `,
+      [
+        caseId,
+        caseLanguage
+      ]
+    );
+
     return caseId;
   }
 
@@ -181,11 +279,15 @@ async function ensureCase(
     `
     INSERT INTO vehicle_cases (
       case_id,
-      status
+      status,
+      language
     )
-    VALUES ($1, 'open')
+    VALUES ($1, 'open', $2)
     `,
-    [caseId]
+    [
+      caseId,
+      caseLanguage
+    ]
   );
 
   return caseId;
@@ -735,13 +837,21 @@ app.post(
 
     try {
 
+      const language =
+        normalizeCaseLanguage(
+          req.body?.language
+        );
+
       const caseId =
         await
-          createVehicleCase();
+          createVehicleCase(
+            language
+          );
 
       res.json({
         success: true,
-        caseId
+        caseId,
+        language
       });
 
     } catch (error) {
@@ -1049,7 +1159,8 @@ app.post(
 
       caseId =
         await ensureCase(
-          caseId
+          caseId,
+          selectedLanguage
         );
 
       const content = [];

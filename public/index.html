@@ -1044,7 +1044,15 @@ document.addEventListener(
           await fetch(
             "/new-case",
             {
-              method: "POST"
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json"
+              },
+              body: JSON.stringify({
+                language:
+                  getSelectedLanguage()
+              })
             }
           );
 
@@ -1064,6 +1072,17 @@ document.addEventListener(
 
         currentCaseId =
           data.caseId;
+
+        if (
+          data.language &&
+          translations[
+            data.language
+          ]
+        ) {
+          applyLanguage(
+            data.language
+          );
+        }
 
         previousResponseId =
           "";
@@ -1525,6 +1544,18 @@ ${currentCaseId}
 
         previousResponseId =
           "";
+
+        if (
+          data.vehicle &&
+          data.vehicle.language &&
+          translations[
+            data.vehicle.language
+          ]
+        ) {
+          applyLanguage(
+            data.vehicle.language
+          );
+        }
 
         caseIdDisplay.textContent =
           currentCaseId;
