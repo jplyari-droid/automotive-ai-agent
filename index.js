@@ -256,9 +256,9 @@ function extractVehicleData(text) {
   if (!data.chassisNumber) {
 
     const japanFrame =
-      text.match(
-        /\b([A-Z]{1,6}[0-9]{1,5}-[0-9]{4,10})\b/i
-      );
+  text.match(
+    /\b((?=[A-Z0-9]{2,10}-)(?=(?:[A-Z0-9]*[A-Z]){2})[A-Z0-9]{2,10}-[0-9]{4,10})\b/i
+  );
 
     if (japanFrame) {
       data.chassisNumber =
@@ -287,18 +287,17 @@ function extractVehicleData(text) {
   // =========================
   // ENGINE CODE
   // =========================
+const engineMatch =
+  text.match(
+    /(?:ENGINE\s*CODE|ENGINE\s*NO\.?|ENGINE\s*NUMBER)\s*[:#-]?\s*((?=[A-Z0-9-]*\d)[A-Z0-9-]{2,20})/i
+  );
 
-  const engineMatch =
-    text.match(
-      /(?:ENGINE\s*CODE|ENGINE)\s*[:#-]\s*([A-Z0-9-]{2,20})/i
+if (engineMatch) {
+  data.engineCode =
+    cleanIdentifier(
+      engineMatch[1]
     );
-
-  if (engineMatch) {
-    data.engineCode =
-      cleanIdentifier(
-        engineMatch[1]
-      );
-  }
+}
 
   // =========================
   // MILEAGE
@@ -435,6 +434,260 @@ async function saveDiagnosticRecord({
     `,
     [caseId]
   );
+}
+
+// =====================================
+// DTC EXTRACTION + AUTO SAVE
+// =====================================
+
+function normalizeDtcField(value) {
+  if (!value) return null;
+
+  const cleaned = String(value).trim();
+
+  if (
+    !cleaned ||
+    /^(UNKNOWN|N\/?A|NOT AVAILABLE|NOT PROVIDED|NULL)$/i.test(cleaned)
+  ) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function extractDtcDetails(userText, aiText) {
+  const records = new Map();
+  const dtcRegex = /\b(?:P|B|C|U)[0-9A-F]{4}(?:-[0-9A-F]{2})?\b/gi;
+
+  const userSource = String(userText || "");
+  const aiSource = String(aiText || "");
+  const combinedSource = `${userSource}\n${aiSource}`;
+
+  // 1) Only DTCs that are actually present in the user's evidence
+  // become database records. This prevents hypothetical AI codes
+  // from being stored as real faults.
+  const userMatches = userSource.match(dtcRegex) || [];
+
+  for (const rawCode of userMatches) {
+    const code = rawCode.toUpperCase();
+
+    if (!records.has(code)) {
+      records.set(code, {
+        code,
+        module: null,
+        description: null,
+        status: null,
+        priority: null
+      });
+    }
+  }
+
+  if (records.size === 0) {
+    return [];
+  }
+
+  // Helper: merge new information without deleting existing values.
+  const mergeRecord = (code, details = {}) => {
+    const normalizedCode = String(code || "").toUpperCase();
+
+    if (!records.has(normalizedCode)) {
+      return;
+    }
+
+    const existing = records.get(normalizedCode);
+
+    records.set(normalizedCode, {
+      code: normalizedCode,
+      module:
+        normalizeDtcField(details.module) ||
+        existing.module ||
+        null,
+      description:
+        normalizeDtcField(details.description) ||
+        existing.description ||
+        null,
+      status:
+        normalizeDtcField(details.status) ||
+        existing.status ||
+        null,
+      priority:
+        normalizeDtcField(details.priority) ||
+        existing.priority ||
+        null
+    });
+  };
+
+  // 2) Parse AI machine-readable DTC_RECORD lines.
+  // This is deliberately tolerant of bullets, markdown, code fences,
+  // and extra spaces before DTC_RECORD.
+  const recordRegex =
+    /DTC_RECORD\s*:\s*CODE\s*=\s*((?:P|B|C|U)[0-9A-F]{4}(?:-[0-9A-F]{2})?)\s*\|\s*MODULE\s*=\s*([^|\r\n]+)\s*\|\s*DESCRIPTION\s*=\s*([^|\r\n]+)\s*\|\s*STATUS\s*=\s*([^|\r\n]+)\s*\|\s*PRIORITY\s*=\s*([^\r\n`]+)/gi;
+
+  let recordMatch;
+
+  while ((recordMatch = recordRegex.exec(aiSource)) !== null) {
+    mergeRecord(recordMatch[1], {
+      module: recordMatch[2],
+      description: recordMatch[3],
+      status: recordMatch[4],
+      priority: recordMatch[5]
+    });
+  }
+
+  // 3) Fallback parser.
+  // If the model did not follow the machine-readable format exactly,
+  // inspect a small text window around each real user DTC and pull
+  // common labels such as Module:, Description:, Status:, Priority:.
+  for (const code of records.keys()) {
+    const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const codeRegex = new RegExp(escapedCode, "ig");
+    let codeMatch;
+
+    while ((codeMatch = codeRegex.exec(combinedSource)) !== null) {
+      const start = Math.max(0, codeMatch.index - 250);
+      const end = Math.min(
+        combinedSource.length,
+        codeMatch.index + code.length + 650
+      );
+
+      const windowText = combinedSource.slice(start, end);
+
+      const getLabel = (label) => {
+        const match = windowText.match(
+          new RegExp(
+            `${label}\\s*[:=-]\\s*([^\\r\\n|]+)`,
+            "i"
+          )
+        );
+
+        return normalizeDtcField(match ? match[1] : null);
+      };
+
+      mergeRecord(code, {
+        module:
+          getLabel("MODULE") ||
+          getLabel("CONTROL MODULE"),
+        description:
+          getLabel("DESCRIPTION") ||
+          getLabel("DTC DESCRIPTION"),
+        status:
+          getLabel("STATUS") ||
+          getLabel("DTC STATUS"),
+        priority:
+          getLabel("PRIORITY")
+      });
+    }
+  }
+
+  // 4) User-message fallback for common compact workshop input such as:
+  // ECM
+  // DTC P0420
+  // Status: Current
+  // The module/status are only copied when the user's message contains
+  // exactly one DTC, which avoids assigning one module to several codes
+  // incorrectly.
+  if (records.size === 1) {
+    const onlyCode = [...records.keys()][0];
+
+    const explicitStatus =
+      userSource.match(
+        /\b(?:DTC\s*)?STATUS\s*[:=-]\s*([^\r\n|]+)/i
+      );
+
+    const explicitModule =
+      userSource.match(
+        /\bMODULE\s*[:=-]\s*([A-Z0-9 _/-]{2,40})/i
+      );
+
+    const standaloneModule =
+      userSource.match(
+        /(?:^|\r?\n)\s*(ECM|PCM|TCM|BCM|ABS|SRS|EPS|HVAC|ADAS|VSA|ESP|EBCM|ECU)\s*(?:\r?\n|$)/i
+      );
+
+    mergeRecord(onlyCode, {
+      module:
+        explicitModule?.[1] ||
+        standaloneModule?.[1] ||
+        null,
+      status:
+        explicitStatus?.[1] ||
+        null
+    });
+  }
+
+  return [...records.values()];
+}
+
+
+async function saveDtcRecords(caseId, dtcRecords, sourceText) {
+  if (!caseId || !Array.isArray(dtcRecords) || dtcRecords.length === 0) {
+    return;
+  }
+
+  for (const record of dtcRecords) {
+    const dtcCode = record.code.toUpperCase();
+
+    const existing = await pool.query(
+      `
+      SELECT id
+      FROM dtc_records
+      WHERE case_id = $1
+        AND UPPER(COALESCE(dtc_code, '')) = $2
+      LIMIT 1
+      `,
+      [caseId, dtcCode]
+    );
+
+    if (existing.rows.length > 0) {
+      // Enrich an existing DTC instead of creating a duplicate row.
+      await pool.query(
+        `
+        UPDATE dtc_records
+        SET
+          module_name = COALESCE($2, module_name),
+          description = COALESCE($3, description),
+          status = COALESCE($4, status),
+          priority = COALESCE($5, priority),
+          source_text = COALESCE(source_text, $6)
+        WHERE id = $1
+        `,
+        [
+          existing.rows[0].id,
+          record.module || null,
+          record.description || null,
+          record.status || null,
+          record.priority || null,
+          sourceText || null
+        ]
+      );
+
+      continue;
+    }
+
+    await pool.query(
+      `
+      INSERT INTO dtc_records (
+        case_id,
+        dtc_code,
+        module_name,
+        description,
+        status,
+        priority,
+        source_text
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        caseId,
+        dtcCode,
+        record.module || null,
+        record.description || null,
+        record.status || null,
+        record.priority || null,
+        sourceText || null
+      ]
+    );
+  }
 }
 
 // =====================================
@@ -661,6 +914,57 @@ app.get(
       res.status(500).json({
         error:
           "Could not search vehicle history."
+      });
+    }
+  }
+);
+
+// =====================================
+// DTC SEARCH
+// =====================================
+
+app.get(
+  "/dtc-search/:code",
+  async (req, res) => {
+    try {
+      const code = (req.params.code || "")
+        .trim()
+        .toUpperCase();
+
+      if (!/^(?:P|B|C|U)[0-9A-F]{4}(?:-[0-9A-F]{2})?$/.test(code)) {
+        return res.status(400).json({
+          error: "Invalid DTC format."
+        });
+      }
+
+      const result = await pool.query(
+        `
+        SELECT
+          d.*,
+          v.vin,
+          v.chassis_number,
+          v.model_code,
+          v.engine_code,
+          v.mileage,
+          v.updated_at
+        FROM dtc_records d
+        LEFT JOIN vehicle_cases v
+          ON v.case_id = d.case_id
+        WHERE UPPER(COALESCE(d.dtc_code, '')) = $1
+        ORDER BY d.created_at DESC
+        `,
+        [code]
+      );
+
+      res.json({
+        code,
+        count: result.rows.length,
+        cases: result.rows
+      });
+    } catch (error) {
+      console.error("DTC SEARCH ERROR:", error);
+      res.status(500).json({
+        error: "Could not search DTC history."
       });
     }
   }
@@ -948,6 +1252,17 @@ Do not replace yet:
 Next live data to send me:
 ...
 
+IMPORTANT DATABASE DTC BLOCK:
+At the very end of every answer, if one or more DTCs are actually present in the user's message, screenshot, PDF, scan report, or other diagnostic evidence, add this machine-readable block:
+
+DTC RECORDS:
+DTC_RECORD: CODE=P0420 | MODULE=ECM | DESCRIPTION=Catalyst System Efficiency Below Threshold Bank 1 | STATUS=Current | PRIORITY=MEDIUM
+
+Use one DTC_RECORD line for each real detected DTC.
+Use UNKNOWN for MODULE, DESCRIPTION, STATUS or PRIORITY when that field is not available.
+Do NOT put hypothetical, example, comparison, possible-future, or suggested DTC codes in the DTC RECORDS block.
+Only include codes that are actually present in the user's diagnostic evidence.
+
 Reply in the same language as the user unless asked otherwise.
 `,
 
@@ -1006,6 +1321,36 @@ Reply in the same language as the user unless asked otherwise.
         console.error(
           "VEHICLE ID SAVE ERROR:",
           identityError
+        );
+      }
+
+      // =================================
+      // AUTOMATIC DTC EXTRACTION + SAVE
+      // =================================
+
+      const detectedDtcs = extractDtcDetails(
+        question,
+        response.output_text
+      );
+
+      try {
+        await saveDtcRecords(
+          caseId,
+          detectedDtcs,
+          combinedText
+        );
+
+        if (detectedDtcs.length > 0) {
+          console.log(
+            "DTC records saved/enriched:",
+            caseId,
+            detectedDtcs.map((item) => item.code).join(", ")
+          );
+        }
+      } catch (dtcError) {
+        console.error(
+          "DTC SAVE ERROR:",
+          dtcError
         );
       }
 
@@ -1079,7 +1424,10 @@ Reply in the same language as the user unless asked otherwise.
         caseId,
 
         vehicleData:
-          extractedData
+          extractedData,
+
+        detectedDtcs:
+          detectedDtcs.map((item) => item.code)
       });
 
     } catch (error) {

@@ -192,6 +192,25 @@
       background: #4b5563;
     }
 
+    #dtcSearchResults {
+      display: none;
+      margin-top: 10px;
+    }
+
+    .dtcResult {
+      background: #374151;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .dtcResult:hover {
+      background: #4b5563;
+    }
+
     .label {
       font-weight: bold;
     }
@@ -263,6 +282,36 @@
     <div id="searchStatus"></div>
 
     <div id="searchResults"></div>
+
+  </div>
+
+  <!-- DTC HISTORY SEARCH -->
+
+  <div class="panel">
+
+    <div
+      class="small"
+      style="font-weight: bold;"
+    >
+      Search DTC History
+    </div>
+
+    <input
+      id="dtcSearch"
+      type="text"
+      placeholder="DTC code لکھیں، مثال: P0420 یا U0167"
+    />
+
+    <button
+      id="dtcSearchButton"
+      type="button"
+    >
+      Search DTC History
+    </button>
+
+    <div id="dtcSearchStatus"></div>
+
+    <div id="dtcSearchResults"></div>
 
   </div>
 
@@ -393,6 +442,26 @@ document.addEventListener(
     const searchStatus =
       document.getElementById(
         "searchStatus"
+      );
+
+    const dtcSearch =
+      document.getElementById(
+        "dtcSearch"
+      );
+
+    const dtcSearchButton =
+      document.getElementById(
+        "dtcSearchButton"
+      );
+
+    const dtcSearchResults =
+      document.getElementById(
+        "dtcSearchResults"
+      );
+
+    const dtcSearchStatus =
+      document.getElementById(
+        "dtcSearchStatus"
       );
 
     let previousResponseId = "";
@@ -571,6 +640,7 @@ document.addEventListener(
       sendButton.disabled = true;
       newCaseButton.disabled = true;
       searchButton.disabled = true;
+      dtcSearchButton.disabled = true;
 
       sendButton.textContent =
         "AI Agent is thinking...";
@@ -858,6 +928,7 @@ document.addEventListener(
       sendButton.disabled = false;
       newCaseButton.disabled = false;
       searchButton.disabled = false;
+      dtcSearchButton.disabled = false;
 
       sendButton.textContent =
         "Send Question / File";
@@ -879,6 +950,9 @@ document.addEventListener(
         true;
 
       searchButton.disabled =
+        true;
+
+      dtcSearchButton.disabled =
         true;
 
       status.textContent =
@@ -971,6 +1045,9 @@ ${currentCaseId}
           false;
 
         searchButton.disabled =
+          false;
+
+        dtcSearchButton.disabled =
           false;
       }
     }
@@ -1142,6 +1219,196 @@ ${currentCaseId}
     }
 
     // =====================================
+    // DTC SEARCH
+    // =====================================
+
+    async function searchDtcHistory() {
+
+      const code =
+        dtcSearch.value
+          .trim()
+          .toUpperCase();
+
+      if (!code) {
+
+        alert(
+          "DTC code لکھیں، مثال: P0420 یا U0167"
+        );
+
+        return;
+      }
+
+      if (
+        !/^(?:P|B|C|U)[0-9A-F]{4}(?:-[0-9A-F]{2})?$/.test(code)
+      ) {
+
+        alert(
+          "DTC format درست نہیں ہے۔ مثال: P0420, U0167, C1111-96"
+        );
+
+        return;
+      }
+
+      dtcSearchButton.disabled =
+        true;
+
+      dtcSearchStatus.textContent =
+        "Searching DTC history...";
+
+      dtcSearchResults.style.display =
+        "none";
+
+      dtcSearchResults.innerHTML =
+        "";
+
+      try {
+
+        const response =
+          await fetch(
+            "/dtc-search/" +
+            encodeURIComponent(code)
+          );
+
+        const data =
+          await response.json();
+
+        if (!response.ok) {
+
+          throw new Error(
+            data.error ||
+            "DTC search failed."
+          );
+        }
+
+        if (
+          !data.cases ||
+          data.cases.length === 0
+        ) {
+
+          dtcSearchStatus.textContent =
+            "No DTC history found for " +
+            code +
+            ".";
+
+          return;
+        }
+
+        dtcSearchStatus.textContent =
+          data.cases.length +
+          " record(s) found for " +
+          code +
+          ".";
+
+        dtcSearchResults.style.display =
+          "block";
+
+        data.cases.forEach(
+          function (record) {
+
+            const div =
+              document.createElement(
+                "div"
+              );
+
+            div.className =
+              "dtcResult";
+
+            let text =
+              "DTC: " +
+              (record.dtc_code || code) +
+              "\nCase ID: " +
+              record.case_id;
+
+            if (record.module_name) {
+              text +=
+                "\nModule: " +
+                record.module_name;
+            }
+
+            if (record.description) {
+              text +=
+                "\nDescription: " +
+                record.description;
+            }
+
+            if (record.status) {
+              text +=
+                "\nStatus: " +
+                record.status;
+            }
+
+            if (record.priority) {
+              text +=
+                "\nPriority: " +
+                record.priority;
+            }
+
+            if (record.vin) {
+              text +=
+                "\nVIN: " +
+                record.vin;
+            }
+
+            if (record.chassis_number) {
+              text +=
+                "\nFrame/Chassis: " +
+                record.chassis_number;
+            }
+
+            if (record.model_code) {
+              text +=
+                "\nModel Code: " +
+                record.model_code;
+            }
+
+            if (record.engine_code) {
+              text +=
+                "\nEngine: " +
+                record.engine_code;
+            }
+
+            if (record.mileage) {
+              text +=
+                "\nMileage: " +
+                record.mileage;
+            }
+
+            text +=
+              "\n\nClick to load this diagnostic case.";
+
+            div.textContent =
+              text;
+
+            div.addEventListener(
+              "click",
+              function () {
+
+                loadCase(
+                  record.case_id
+                );
+              }
+            );
+
+            dtcSearchResults.appendChild(
+              div
+            );
+          }
+        );
+
+      } catch (error) {
+
+        dtcSearchStatus.textContent =
+          "DTC search error: " +
+          error.message;
+
+      } finally {
+
+        dtcSearchButton.disabled =
+          false;
+      }
+    }
+
+    // =====================================
     // LOAD CASE HISTORY
     // =====================================
 
@@ -1305,6 +1572,9 @@ ${currentCaseId}
         searchResults.style.display =
           "none";
 
+        dtcSearchResults.style.display =
+          "none";
+
       } catch (error) {
 
         status.textContent =
@@ -1344,6 +1614,27 @@ ${currentCaseId}
           event.preventDefault();
 
           searchVehicleHistory();
+        }
+      }
+    );
+
+    dtcSearchButton.addEventListener(
+      "click",
+      searchDtcHistory
+    );
+
+    dtcSearch.addEventListener(
+      "keydown",
+      function (event) {
+
+        if (
+          event.key ===
+          "Enter"
+        ) {
+
+          event.preventDefault();
+
+          searchDtcHistory();
         }
       }
     );
