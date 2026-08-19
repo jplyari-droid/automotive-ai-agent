@@ -95,6 +95,17 @@
       background: #312e81;
     }
 
+    .message a {
+      color: #bfdbfe;
+      font-weight: bold;
+      text-decoration: underline;
+      overflow-wrap: anywhere;
+    }
+
+    .message a:hover {
+      color: #ffffff;
+    }
+
     textarea {
       width: 100%;
       height: 90px;
@@ -607,6 +618,58 @@ document.addEventListener(
     );
 
     // =====================================
+    // SAFE CLICKABLE LINKS
+    // =====================================
+
+    function appendTextWithLinks(element, text) {
+      const source = String(text || "");
+      const urlPattern = /https?:\/\/[^\s<>"']+/gi;
+      let lastIndex = 0;
+      let match;
+
+      while ((match = urlPattern.exec(source)) !== null) {
+        if (match.index > lastIndex) {
+          element.appendChild(
+            document.createTextNode(source.slice(lastIndex, match.index))
+          );
+        }
+
+        let url = match[0];
+        let trailingPunctuation = "";
+
+        while (/[.,;:!?)]$/.test(url)) {
+          trailingPunctuation = url.slice(-1) + trailingPunctuation;
+          url = url.slice(0, -1);
+        }
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.textContent = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer nofollow";
+        element.appendChild(link);
+
+        if (trailingPunctuation) {
+          element.appendChild(document.createTextNode(trailingPunctuation));
+        }
+
+        lastIndex = match.index + match[0].length;
+      }
+
+      if (lastIndex < source.length) {
+        element.appendChild(document.createTextNode(source.slice(lastIndex)));
+      }
+    }
+
+    function renderAiMessage(element, answer) {
+      element.textContent = "";
+      appendTextWithLinks(
+        element,
+        "Automotive AI:\n" + String(answer || "")
+      );
+    }
+
+    // =====================================
     // DISPLAY VEHICLE DATA
     // =====================================
 
@@ -895,9 +958,7 @@ document.addEventListener(
           data.answer
         ) {
 
-          aiMessage.textContent =
-            "Automotive AI:\n" +
-            data.answer;
+          renderAiMessage(aiMessage, data.answer);
 
           if (
             data.responseId
@@ -1622,9 +1683,7 @@ ${currentCaseId}
                 aiMessage.className =
                   "message ai";
 
-                aiMessage.textContent =
-                  "Automotive AI:\n" +
-                  record.ai_answer;
+                renderAiMessage(aiMessage, record.ai_answer);
 
                 chat.appendChild(
                   aiMessage
