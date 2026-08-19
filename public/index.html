@@ -386,6 +386,14 @@
     <span id="sendButtonText">Send Question / File</span>
   </button>
 
+  <button
+    id="reportButton"
+    type="button"
+    style="margin-top: 10px; background: #0f766e;"
+  >
+    Download / Print PDF Report
+  </button>
+
   <div id="status"></div>
 
 </div>
@@ -406,6 +414,9 @@ document.addEventListener(
 
     const sendButton =
       document.getElementById("sendButton");
+
+    const reportButton =
+      document.getElementById("reportButton");
 
     const newCaseButton =
       document.getElementById(
@@ -1729,6 +1740,23 @@ ${currentCaseId}
     sendButton.addEventListener(
       "click",
       askAgent
+    );
+
+    reportButton.addEventListener(
+      "click",
+      function () {
+        if (!currentCaseId) {
+          alert("Create or load a diagnostic case first.");
+          return;
+        }
+
+        window.open(
+          "/report/" +
+          encodeURIComponent(currentCaseId),
+          "_blank",
+          "noopener"
+        );
+      }
     );
 
     newCaseButton.addEventListener(

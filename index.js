@@ -324,6 +324,164 @@ app.get("/dtc-search/:code", async (req, res) => {
   }
 });
 
+function escapeReportHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function reportText(value) {
+  const withoutDatabaseLines = String(value || "")
+    .replace(/^DTC_RECORD:.*$/gim, "")
+    .trim();
+  return escapeReportHtml(withoutDatabaseLines)
+    .replace(
+      /(https?:\/\/[^\s<]+)/gi,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    )
+    .replace(/\r?\n/g, "<br>");
+}
+
+app.get("/report/:caseId", async (req, res) => {
+  try {
+    const caseId = String(req.params.caseId || "").trim();
+    const [vehicleResult, historyResult, dtcResult] = await Promise.all([
+      pool.query("SELECT * FROM vehicle_cases WHERE case_id = $1", [caseId]),
+      pool.query(
+        "SELECT * FROM diagnostic_records WHERE case_id = $1 ORDER BY created_at ASC",
+        [caseId]
+      ),
+      pool.query(
+        "SELECT * FROM dtc_records WHERE case_id = $1 ORDER BY created_at ASC",
+        [caseId]
+      )
+    ]);
+
+    if (!vehicleResult.rows.length) {
+      return res.status(404).send("Diagnostic case not found.");
+    }
+
+    const vehicle = vehicleResult.rows[0];
+    const vehicleFields = [
+      ["VIN", vehicle.vin],
+      ["Frame / Chassis", vehicle.chassis_number],
+      ["Model Code", vehicle.model_code],
+      ["Engine Code", vehicle.engine_code],
+      ["Mileage", vehicle.mileage]
+    ].filter(([, value]) => value);
+
+    const vehicleRows = vehicleFields.length
+      ? vehicleFields.map(([label, value]) =>
+          `<tr><th>${escapeReportHtml(label)}</th><td>${escapeReportHtml(value)}</td></tr>`
+        ).join("")
+      : '<tr><td colspan="2">No vehicle identity was saved.</td></tr>';
+
+    const dtcRows = dtcResult.rows.length
+      ? dtcResult.rows.map((record) => `
+          <tr>
+            <td>${escapeReportHtml(record.dtc_code || "-")}</td>
+            <td>${escapeReportHtml(record.module_name || "-")}</td>
+            <td>${escapeReportHtml(record.description || "-")}</td>
+            <td>${escapeReportHtml(record.status || "-")}</td>
+            <td>${escapeReportHtml(record.priority || "-")}</td>
+          </tr>`).join("")
+      : '<tr><td colspan="5">No saved DTC records.</td></tr>';
+
+    const historyBlocks = historyResult.rows.length
+      ? historyResult.rows.map((record, index) => `
+          <section class="diagnostic-entry">
+            <h3>Diagnostic Entry ${index + 1}</h3>
+            ${record.user_question ? `
+              <div class="subheading">Technician question / evidence</div>
+              <div class="content">${reportText(record.user_question)}</div>` : ""}
+            ${record.file_name ? `
+              <div class="file">Attachment: ${escapeReportHtml(record.file_name)}</div>` : ""}
+            ${record.ai_answer ? `
+              <div class="subheading">Diagnostic assessment</div>
+              <div class="content">${reportText(record.ai_answer)}</div>` : ""}
+          </section>`).join("")
+      : '<p class="empty">No diagnostic history was saved for this case.</p>';
+
+    const generatedAt = new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short"
+    }).format(new Date());
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diagnostic Report - ${escapeReportHtml(caseId)}</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #e5e7eb; color: #111827; font-family: Arial, "Noto Sans", sans-serif; }
+    .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; justify-content: center; padding: 12px; background: #111827; }
+    .toolbar button { border: 0; border-radius: 8px; padding: 11px 18px; background: #2563eb; color: white; font-size: 15px; cursor: pointer; }
+    .report { width: min(210mm, calc(100% - 24px)); min-height: 297mm; margin: 20px auto; padding: 18mm; background: white; box-shadow: 0 8px 30px rgba(0,0,0,.15); }
+    header { border-bottom: 4px solid #0f766e; padding-bottom: 14px; margin-bottom: 22px; }
+    h1 { margin: 0 0 7px; color: #0f766e; font-size: 28px; }
+    .meta { color: #4b5563; font-size: 13px; line-height: 1.6; }
+    h2 { margin: 25px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #d1d5db; color: #1f2937; font-size: 19px; }
+    h3 { margin: 0 0 12px; color: #0f766e; font-size: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    th { background: #f3f4f6; }
+    .vehicle-table th { width: 30%; }
+    .diagnostic-entry { break-inside: avoid; margin: 0 0 18px; padding: 14px; border: 1px solid #d1d5db; border-radius: 8px; }
+    .subheading { margin: 12px 0 5px; font-weight: bold; color: #374151; }
+    .content { white-space: normal; line-height: 1.55; overflow-wrap: anywhere; }
+    .file, .empty { color: #6b7280; font-size: 12px; margin-top: 8px; }
+    a { color: #1d4ed8; overflow-wrap: anywhere; }
+    footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid #d1d5db; color: #6b7280; font-size: 10px; }
+    @page { size: A4; margin: 12mm; }
+    @media print {
+      body { background: white; }
+      .toolbar { display: none; }
+      .report { width: auto; min-height: auto; margin: 0; padding: 0; box-shadow: none; }
+      a { color: #111827; text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    <button type="button" onclick="window.close()">Close</button>
+  </div>
+  <main class="report">
+    <header>
+      <h1>Automotive Diagnostic Report</h1>
+      <div class="meta">
+        Case ID: ${escapeReportHtml(caseId)}<br>
+        Generated: ${escapeReportHtml(generatedAt)}
+      </div>
+    </header>
+    <h2>Vehicle Information</h2>
+    <table class="vehicle-table"><tbody>${vehicleRows}</tbody></table>
+    <h2>Detected DTCs</h2>
+    <table>
+      <thead><tr><th>Code</th><th>Module</th><th>Description</th><th>Status</th><th>Priority</th></tr></thead>
+      <tbody>${dtcRows}</tbody>
+    </table>
+    <h2>Diagnostic History</h2>
+    ${historyBlocks}
+    <footer>
+      This report supports professional diagnosis but does not replace vehicle-specific OEM service information, safety procedures, or measured verification.
+    </footer>
+  </main>
+</body>
+</html>`);
+  } catch (error) {
+    console.error("REPORT ERROR:", error);
+    res.status(500).send("Could not create diagnostic report.");
+  }
+});
+
 const DIAGNOSTIC_INSTRUCTIONS = `
 You are a professional automotive diagnostic assistant for workshop technicians.
 
