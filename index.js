@@ -324,6 +324,63 @@ app.get("/dtc-search/:code", async (req, res) => {
   }
 });
 
+app.post("/translate-chat", async (req, res) => {
+  try {
+    const supportedLanguages = {
+      urdu: "Urdu",
+      english: "English",
+      japanese: "Japanese",
+      sinhala: "Sinhala"
+    };
+    const languageKey = String(req.body?.language || "").trim().toLowerCase();
+    const targetLanguage = supportedLanguages[languageKey];
+    const messages = Array.isArray(req.body?.messages)
+      ? req.body.messages.slice(0, 40).map((message) => String(message || "").slice(0, 12000))
+      : [];
+
+    if (!targetLanguage || !messages.length) {
+      return res.status(400).json({ error: "A supported language and chat messages are required." });
+    }
+
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL || "gpt-5",
+      instructions: `Translate each supplied chat message into ${targetLanguage}.
+Preserve its meaning, paragraph structure, list numbering, headings, DTC codes, vehicle identifiers, measurements, URLs, and DTC_RECORD lines exactly.
+Do not add advice, explanations, or new diagnostic information.
+Return exactly one translated string for each input string in the same order.`,
+      input: JSON.stringify({ messages }),
+      text: {
+        format: {
+          type: "json_schema",
+          name: "translated_chat_messages",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              translations: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            required: ["translations"],
+            additionalProperties: false
+          }
+        }
+      }
+    });
+
+    const parsed = JSON.parse(response.output_text || "{}");
+    if (!Array.isArray(parsed.translations) || parsed.translations.length !== messages.length) {
+      throw new Error("Translation response did not match the visible chat.");
+    }
+
+    res.json({ success: true, translations: parsed.translations });
+  } catch (error) {
+    console.error("CHAT TRANSLATION ERROR:", error);
+    res.status(500).json({ error: error.message || "Could not translate chat." });
+  }
+});
+
 function escapeReportHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -345,9 +402,91 @@ function reportText(value) {
     .replace(/\r?\n/g, "<br>");
 }
 
+async function translateReportValues(values, targetLanguage) {
+  if (!values.length || targetLanguage === "English") return values;
+
+  const response = await openai.responses.create({
+    model: process.env.OPENAI_MODEL || "gpt-5",
+    instructions: `Translate each supplied automotive diagnostic report value into ${targetLanguage}.
+Preserve DTC codes, vehicle identifiers, measurements, URLs, technical abbreviations, headings, paragraph structure, and list numbering.
+Do not add, remove, or reinterpret diagnostic information.
+Return exactly one translated string for each input string in the same order.`,
+    input: JSON.stringify({ values }),
+    text: {
+      format: {
+        type: "json_schema",
+        name: "translated_report_values",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            translations: {
+              type: "array",
+              items: { type: "string" }
+            }
+          },
+          required: ["translations"],
+          additionalProperties: false
+        }
+      }
+    }
+  });
+
+  const parsed = JSON.parse(response.output_text || "{}");
+  if (!Array.isArray(parsed.translations) || parsed.translations.length !== values.length) {
+    throw new Error("PDF translation response did not match the report data.");
+  }
+  return parsed.translations;
+}
+
 app.get("/report/:caseId", async (req, res) => {
   try {
     const caseId = String(req.params.caseId || "").trim();
+    const languageKey = String(req.query?.language || "english").trim().toLowerCase();
+    const languageNames = {
+      urdu: "Urdu", english: "English", japanese: "Japanese", sinhala: "Sinhala"
+    };
+    const selectedLanguageKey = languageNames[languageKey] ? languageKey : "english";
+    const targetLanguage = languageNames[selectedLanguageKey];
+    const reportLabels = {
+      english: {
+        title: "Automotive Diagnostic Report", caseId: "Case ID", generated: "Generated",
+        vehicle: "Vehicle Information", dtcs: "Detected DTCs", history: "Diagnostic History",
+        code: "Code", module: "Module", description: "Description", status: "Status", priority: "Priority",
+        entry: "Diagnostic Entry", question: "Technician question / evidence", assessment: "Diagnostic assessment",
+        attachment: "Attachment", print: "Print / Save as PDF", close: "Close",
+        noVehicle: "No vehicle identity was saved.", noDtcs: "No saved DTC records.", noHistory: "No diagnostic history was saved for this case.",
+        disclaimer: "This report supports professional diagnosis but does not replace vehicle-specific OEM service information, safety procedures, or measured verification."
+      },
+      japanese: {
+        title: "自動車診断レポート", caseId: "ケースID", generated: "作成日時",
+        vehicle: "車両情報", dtcs: "検出されたDTC", history: "診断履歴",
+        code: "コード", module: "モジュール", description: "説明", status: "状態", priority: "優先度",
+        entry: "診断記録", question: "整備士の質問 / 証拠", assessment: "診断評価",
+        attachment: "添付ファイル", print: "印刷 / PDFとして保存", close: "閉じる",
+        noVehicle: "車両情報は保存されていません。", noDtcs: "保存されたDTCはありません。", noHistory: "このケースの診断履歴はありません。",
+        disclaimer: "このレポートは専門的な診断を支援するものであり、車両固有のOEM整備情報、安全手順、実測による確認に代わるものではありません。"
+      },
+      urdu: {
+        title: "آٹوموٹیو تشخیصی رپورٹ", caseId: "کیس آئی ڈی", generated: "تیاری کی تاریخ",
+        vehicle: "گاڑی کی معلومات", dtcs: "معلوم شدہ DTCs", history: "تشخیصی تاریخ",
+        code: "کوڈ", module: "ماڈیول", description: "تفصیل", status: "حالت", priority: "ترجیح",
+        entry: "تشخیصی اندراج", question: "ٹیکنیشن کا سوال / ثبوت", assessment: "تشخیصی جائزہ",
+        attachment: "منسلک فائل", print: "پرنٹ / PDF محفوظ کریں", close: "بند کریں",
+        noVehicle: "گاڑی کی شناخت محفوظ نہیں ہے۔", noDtcs: "کوئی محفوظ DTC ریکارڈ نہیں۔", noHistory: "اس کیس کی تشخیصی تاریخ موجود نہیں۔",
+        disclaimer: "یہ رپورٹ پیشہ ورانہ تشخیص میں مدد دیتی ہے لیکن گاڑی کی مخصوص OEM معلومات، حفاظتی طریقہ کار یا عملی پیمائش کا متبادل نہیں ہے۔"
+      },
+      sinhala: {
+        title: "වාහන රෝග විනිශ්චය වාර්තාව", caseId: "කේස් අංකය", generated: "සාදන ලදී",
+        vehicle: "වාහන තොරතුරු", dtcs: "හඳුනාගත් DTC", history: "රෝග විනිශ්චය ඉතිහාසය",
+        code: "කේතය", module: "මොඩියුලය", description: "විස්තරය", status: "තත්ත්වය", priority: "ප්‍රමුඛතාව",
+        entry: "රෝග විනිශ්චය සටහන", question: "කාර්මිකයාගේ ප්‍රශ්නය / සාක්ෂි", assessment: "රෝග විනිශ්චය ඇගයීම",
+        attachment: "ඇමුණුම", print: "මුද්‍රණය / PDF ලෙස සුරකින්න", close: "වසන්න",
+        noVehicle: "වාහන හඳුනාගැනීමේ තොරතුරු සුරැකී නැත.", noDtcs: "සුරැකි DTC වාර්තා නොමැත.", noHistory: "මෙම කේස් සඳහා රෝග විනිශ්චය ඉතිහාසයක් නොමැත.",
+        disclaimer: "මෙම වාර්තාව වෘත්තීය රෝග විනිශ්චයට සහාය වන නමුත් වාහන-විශේෂිත OEM තොරතුරු, ආරක්ෂක ක්‍රියා පටිපාටි හෝ මිනුම් තහවුරු කිරීම වෙනුවට භාවිතා නොකළ යුතුය."
+      }
+    };
+    const labels = reportLabels[selectedLanguageKey];
     const [vehicleResult, historyResult, dtcResult] = await Promise.all([
       pool.query("SELECT * FROM vehicle_cases WHERE case_id = $1", [caseId]),
       pool.query(
@@ -365,6 +504,36 @@ app.get("/report/:caseId", async (req, res) => {
     }
 
     const vehicle = vehicleResult.rows[0];
+    // Translating a long case history can take too long and is usually not
+    // useful in a current-language report. Non-English reports therefore use
+    // the latest diagnostic entry; English reports retain the complete history.
+    const historyRowsForReport = selectedLanguageKey === "english"
+      ? historyResult.rows
+      : historyResult.rows.slice(-1);
+    const reportHistory = historyRowsForReport.map((record) => ({ ...record }));
+    const reportDtcs = dtcResult.rows.map((record) => ({ ...record }));
+    const translationJobs = [];
+    const translationTargets = [];
+
+    for (const record of reportDtcs) {
+      for (const field of ["description", "status", "priority"]) {
+        if (record[field]) {
+          translationJobs.push(String(record[field]));
+          translationTargets.push((value) => { record[field] = value; });
+        }
+      }
+    }
+    for (const record of reportHistory) {
+      for (const field of ["user_question", "ai_answer"]) {
+        if (record[field]) {
+          translationJobs.push(String(record[field]));
+          translationTargets.push((value) => { record[field] = value; });
+        }
+      }
+    }
+    // Do not translate long saved answers while opening a report. The report
+    // uses the language in which the diagnostic entry was originally saved.
+    // This keeps PDF generation immediate and predictable.
     const vehicleFields = [
       ["VIN", vehicle.vin],
       ["Frame / Chassis", vehicle.chassis_number],
@@ -377,10 +546,10 @@ app.get("/report/:caseId", async (req, res) => {
       ? vehicleFields.map(([label, value]) =>
           `<tr><th>${escapeReportHtml(label)}</th><td>${escapeReportHtml(value)}</td></tr>`
         ).join("")
-      : '<tr><td colspan="2">No vehicle identity was saved.</td></tr>';
+      : `<tr><td colspan="2">${escapeReportHtml(labels.noVehicle)}</td></tr>`;
 
-    const dtcRows = dtcResult.rows.length
-      ? dtcResult.rows.map((record) => `
+    const dtcRows = reportDtcs.length
+      ? reportDtcs.map((record) => `
           <tr>
             <td>${escapeReportHtml(record.dtc_code || "-")}</td>
             <td>${escapeReportHtml(record.module_name || "-")}</td>
@@ -388,22 +557,22 @@ app.get("/report/:caseId", async (req, res) => {
             <td>${escapeReportHtml(record.status || "-")}</td>
             <td>${escapeReportHtml(record.priority || "-")}</td>
           </tr>`).join("")
-      : '<tr><td colspan="5">No saved DTC records.</td></tr>';
+      : `<tr><td colspan="5">${escapeReportHtml(labels.noDtcs)}</td></tr>`;
 
-    const historyBlocks = historyResult.rows.length
-      ? historyResult.rows.map((record, index) => `
+    const historyBlocks = reportHistory.length
+      ? reportHistory.map((record, index) => `
           <section class="diagnostic-entry">
-            <h3>Diagnostic Entry ${index + 1}</h3>
+            <h3>${escapeReportHtml(labels.entry)} ${index + 1}</h3>
             ${record.user_question ? `
-              <div class="subheading">Technician question / evidence</div>
+              <div class="subheading">${escapeReportHtml(labels.question)}</div>
               <div class="content">${reportText(record.user_question)}</div>` : ""}
             ${record.file_name ? `
-              <div class="file">Attachment: ${escapeReportHtml(record.file_name)}</div>` : ""}
+              <div class="file">${escapeReportHtml(labels.attachment)}: ${escapeReportHtml(record.file_name)}</div>` : ""}
             ${record.ai_answer ? `
-              <div class="subheading">Diagnostic assessment</div>
+              <div class="subheading">${escapeReportHtml(labels.assessment)}</div>
               <div class="content">${reportText(record.ai_answer)}</div>` : ""}
           </section>`).join("")
-      : '<p class="empty">No diagnostic history was saved for this case.</p>';
+      : `<p class="empty">${escapeReportHtml(labels.noHistory)}</p>`;
 
     const generatedAt = new Intl.DateTimeFormat("en-GB", {
       dateStyle: "medium",
@@ -412,11 +581,11 @@ app.get("/report/:caseId", async (req, res) => {
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(`<!DOCTYPE html>
-<html lang="en">
+<html lang="${selectedLanguageKey === "japanese" ? "ja" : selectedLanguageKey === "urdu" ? "ur" : selectedLanguageKey === "sinhala" ? "si" : "en"}" dir="${selectedLanguageKey === "urdu" ? "rtl" : "ltr"}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Diagnostic Report - ${escapeReportHtml(caseId)}</title>
+  <title>${escapeReportHtml(labels.title)} - ${escapeReportHtml(caseId)}</title>
   <style>
     :root { color-scheme: light; }
     * { box-sizing: border-box; }
@@ -450,28 +619,28 @@ app.get("/report/:caseId", async (req, res) => {
 </head>
 <body>
   <div class="toolbar">
-    <button type="button" onclick="window.print()">Print / Save as PDF</button>
-    <button type="button" onclick="window.close()">Close</button>
+    <button type="button" onclick="window.print()">${escapeReportHtml(labels.print)}</button>
+    <button type="button" onclick="window.close()">${escapeReportHtml(labels.close)}</button>
   </div>
   <main class="report">
     <header>
-      <h1>Automotive Diagnostic Report</h1>
+      <h1>${escapeReportHtml(labels.title)}</h1>
       <div class="meta">
-        Case ID: ${escapeReportHtml(caseId)}<br>
-        Generated: ${escapeReportHtml(generatedAt)}
+        ${escapeReportHtml(labels.caseId)}: ${escapeReportHtml(caseId)}<br>
+        ${escapeReportHtml(labels.generated)}: ${escapeReportHtml(generatedAt)}
       </div>
     </header>
-    <h2>Vehicle Information</h2>
+    <h2>${escapeReportHtml(labels.vehicle)}</h2>
     <table class="vehicle-table"><tbody>${vehicleRows}</tbody></table>
-    <h2>Detected DTCs</h2>
+    <h2>${escapeReportHtml(labels.dtcs)}</h2>
     <table>
-      <thead><tr><th>Code</th><th>Module</th><th>Description</th><th>Status</th><th>Priority</th></tr></thead>
+      <thead><tr><th>${escapeReportHtml(labels.code)}</th><th>${escapeReportHtml(labels.module)}</th><th>${escapeReportHtml(labels.description)}</th><th>${escapeReportHtml(labels.status)}</th><th>${escapeReportHtml(labels.priority)}</th></tr></thead>
       <tbody>${dtcRows}</tbody>
     </table>
-    <h2>Diagnostic History</h2>
+    <h2>${escapeReportHtml(labels.history)}</h2>
     ${historyBlocks}
     <footer>
-      This report supports professional diagnosis but does not replace vehicle-specific OEM service information, safety procedures, or measured verification.
+      ${escapeReportHtml(labels.disclaimer)}
     </footer>
   </main>
 </body>

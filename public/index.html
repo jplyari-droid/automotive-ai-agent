@@ -680,6 +680,92 @@ document.addEventListener(
       );
     }
 
+    async function translateVisibleChat(language) {
+      const aiMessages =
+        Array.from(
+          chat.querySelectorAll(".message.ai")
+        ).filter(
+          function (message) {
+            return !message.textContent.includes(
+              "AI Agent is thinking"
+            );
+          }
+        );
+
+      // Translate only the latest diagnostic answer. Translating an entire
+      // long case history on every selector change is slow and expensive.
+      const messages = aiMessages.length
+        ? [aiMessages[aiMessages.length - 1]]
+        : [];
+
+      if (!messages.length) {
+        return;
+      }
+
+      const originalStatus =
+        status.textContent;
+
+      languageSelect.disabled = true;
+      status.textContent =
+        "Translating visible chat...";
+
+      try {
+        const response = await fetch(
+          "/translate-chat",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              language,
+              messages: messages.map(
+                function (message) {
+                  return message.textContent || "";
+                }
+              )
+            })
+          }
+        );
+
+        const data = await response.json();
+
+        if (
+          !response.ok ||
+          !Array.isArray(data.translations) ||
+          data.translations.length !== messages.length
+        ) {
+          throw new Error(
+            data.error ||
+            "Chat translation failed."
+          );
+        }
+
+        messages.forEach(
+          function (message, index) {
+            message.textContent = "";
+            appendTextWithLinks(
+              message,
+              data.translations[index]
+            );
+          }
+        );
+
+        status.textContent =
+          "Visible chat translated.";
+
+      } catch (error) {
+        status.textContent =
+          "Translation error: " +
+          error.message;
+      } finally {
+        languageSelect.disabled = false;
+        if (!status.textContent) {
+          status.textContent = originalStatus;
+        }
+      }
+    }
+
     // =====================================
     // DISPLAY VEHICLE DATA
     // =====================================
@@ -1752,7 +1838,11 @@ ${currentCaseId}
 
         window.open(
           "/report/" +
-          encodeURIComponent(currentCaseId),
+          encodeURIComponent(currentCaseId) +
+          "?language=" +
+          encodeURIComponent(
+            getSelectedLanguage()
+          ),
           "_blank",
           "noopener"
         );
@@ -1808,8 +1898,10 @@ ${currentCaseId}
 
     languageSelect.addEventListener(
       "change",
-      function () {
-        applyLanguage(languageSelect.value);
+      async function () {
+        const language = languageSelect.value;
+        applyLanguage(language);
+        await translateVisibleChat(language);
       }
     );
 
