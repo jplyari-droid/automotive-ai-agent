@@ -1876,12 +1876,25 @@ ${currentCaseId}
         );
         reportUrl.searchParams.set("language", getSelectedLanguage());
 
+        if (
+          reportUrl.hostname !== "localhost" &&
+          reportUrl.hostname !== "127.0.0.1"
+        ) {
+          reportUrl.protocol = "https:";
+        }
+
+        const shareMessage =
+          t("shareText") +
+          " - " +
+          currentCaseId +
+          "\n\n" +
+          reportUrl.href;
+
         try {
           if (navigator.share) {
             await navigator.share({
               title: "Automotive AI Agent",
-              text: t("shareText") + " - " + currentCaseId,
-              url: reportUrl.href
+              text: shareMessage
             });
           } else {
             await navigator.clipboard.writeText(reportUrl.href);
